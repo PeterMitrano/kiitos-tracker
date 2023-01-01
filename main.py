@@ -130,7 +130,7 @@ def on_new_valid_card(new_card, remaining_cards):
 
 def run_kiitos():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--debug-vision')
+    parser.add_argument('--debug-vision', action='store_true')
 
     args = parser.parse_args()
 
