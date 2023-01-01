@@ -123,7 +123,6 @@ def draw_round_reset(screen, remaining_cards, round_count):
                                      game_height - top_padding // 2 + (top_padding // 2 - countdown_size[1]) // 2))
         pygame.display.flip()
         pygame.time.wait(interval)
-    round_count += 1
 
 
 def draw_game_over(screen):
@@ -135,7 +134,7 @@ def draw_game_over(screen):
 
 
 def run_kiitos():
-    ncd = NewCardDetector()
+    # ncd = NewCardDetector()
     remaining_cards = reset_card_dict()
 
     screen = pygame.display.set_mode([game_width, game_height])
@@ -143,7 +142,7 @@ def run_kiitos():
     round_count = 1
     game_over = False
     running = True
-    while running and not game_over and round_count < 4:
+    while running and not game_over:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -160,15 +159,22 @@ def run_kiitos():
         draw_board(screen, remaining_cards, round_count)
 
         if round_over:
-            draw_round_reset(screen, remaining_cards, round_count)
-            remaining_cards = reset_card_dict()
-
-        if round_over and round_count == 3:
-            game_over = True
-            draw_game_over(screen)
-            pygame.time.wait(5000)
+            if round_count < 3:
+                draw_round_reset(screen, remaining_cards, round_count)
+                round_count += 1
+                remaining_cards = reset_card_dict()
+            else:
+                game_over = True
 
         cv2.waitKey(10)
+
+    game_over_splash = True
+    while game_over_splash:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                game_over_splash = False
+                print("Thanks for playing Kiitos with Peter and Andrea's card counter!")
+        draw_game_over(screen)
 
 
 def on_new_valid_card(new_card, remaining_cards):
