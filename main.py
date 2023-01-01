@@ -1,4 +1,5 @@
 import random
+import time
 
 import cv2
 import numpy as np
@@ -6,6 +7,10 @@ import pygame
 
 from ocr import GoogleOCR
 from video_capture import CaptureManager
+
+confidence_inc = 0.25
+confidence_dec = confidence_inc / 5
+motion_alpha = 0.5
 
 
 class CardTracker:
@@ -24,20 +29,18 @@ class NewCardDetector:
 
     def __init__(self):
         self.card_trackers = []
-        cap = cv2.VideoCapture(2)
-        self.cap_manager = CaptureManager(cap)
+        self.cap = cv2.VideoCapture(2)
+        self.cap_manager = CaptureManager(self.cap)
+        while self.cap_manager.last_frame is None:
+            time.sleep(1)
 
         self.ocr = GoogleOCR()
+        # self.ocr = None
 
     def detect(self):
-        ret, frame = self.cap_manager.last_frame
-        if not ret:
-            print("Can't receive frame!")
-            return None
+        frame = self.cap_manager.last_frame
 
         frame = cv2.rotate(frame, cv2.ROTATE_180)
-
-        cv2.imshow('input', frame)
 
         if self.ocr is not None:
             annotated_frame, detected_letters, detected_positions = self.ocr.detect(frame)
@@ -52,86 +55,54 @@ class NewCardDetector:
                 if not tracker_found:
                     self.card_trackers.append(CardTracker(letter, position))
                 else:
-                    card_tracker.position = 0.95 * card_tracker.position + 0.05 * position
-                    card_tracker.confidence = min(1, card_tracker.confidence + 0.25)
+                    card_tracker.position = motion_alpha * card_tracker.position + (1 - motion_alpha) * position
+                    card_tracker.confidence = min(1, card_tracker.confidence + confidence_inc)
 
             to_remove = []
             for card_tracker in self.card_trackers:
-                card_tracker.confidence -= 0.02
+                card_tracker.confidence -= confidence_dec
                 if card_tracker.confidence <= 0:
-                    # print('removing', card_tracker)
                     to_remove.append(card_tracker)
 
             for to_remove_i in to_remove:
                 self.card_trackers.remove(to_remove_i)
 
-            # print(' '.join([t.letter for t in self.card_trackers]))
             for card_tracker in self.card_trackers:
-                # print(card_tracker)
                 if card_tracker.confidence > 0.9 and not card_tracker.reported:
                     card_tracker.reported = True
                     return card_tracker.letter
 
-        cv2.waitKey(1)
-
         return None
-
-    # cap = cv2.VideoCapture(2)
-    # ocr = GoogleOCR()
-    # all_positions = []
-    # for _ in range(60):
-    #     ret, frame = cap.read()
-    #     positions = ocr.detect(frame)
-    #     all_positions.extend(positions)
-    #
-    # all_positions = np.array(all_positions)
-    # plt.scatter(all_positions[:, 0], all_positions[:, 1], s=1)
-    # plt.xlim(0, 640)
-    # plt.ylim(0, 480)
-    # plt.show()
-
-
-# if __name__ == '__main__':
-#     main()
 
 
 def get_card_dict():
-    card_dict = dict()
-    card_dict['A'] = 5
-    card_dict['B'] = 2
-    card_dict['C'] = 3
-    card_dict['D'] = 3
-    card_dict['E'] = 8
-    card_dict['F'] = 2
-    card_dict['G'] = 2
-    card_dict['H'] = 2
-    card_dict['I'] = 6
-    card_dict['J'] = 1
-    card_dict['K'] = 1
-    card_dict['L'] = 3
-    card_dict['M'] = 2
-    card_dict['N'] = 4
-    card_dict['O'] = 5
-    card_dict['P'] = 2
-    card_dict['R'] = 5
-    card_dict['S'] = 5
-    card_dict['T'] = 4
-    card_dict['U'] = 2
-    card_dict['V'] = 1
-    card_dict['W'] = 1
-    card_dict['X'] = 1
-    card_dict['Y'] = 1
-    card_dict['Z'] = 1
-    return card_dict
-
-
-def update_cards(cards, random_update=False):
-    if random_update:
-        random_letter = chr(random.randint(65, 90))
-        while random_letter == 'Q' or cards[random_letter] == 0:
-            random_letter = chr(random.randint(65, 90))
-    else:
-        pass
+    return {
+        'A': 5,
+        'B': 2,
+        'C': 3,
+        'D': 3,
+        'E': 8,
+        'F': 2,
+        'G': 2,
+        'H': 2,
+        'I': 6,
+        'J': 1,
+        'K': 1,
+        'L': 3,
+        'M': 2,
+        'N': 4,
+        'O': 5,
+        'P': 2,
+        'R': 5,
+        'S': 5,
+        'T': 4,
+        'U': 2,
+        'V': 1,
+        'W': 1,
+        'X': 1,
+        'Y': 1,
+        'Z': 1,
+    }
 
 
 def draw_rectangles(display, top_padding, left_padding=50, n_rows=5, n_cols=5, frame_padding=100, card_padding=50,
@@ -150,7 +121,7 @@ def draw_rectangles(display, top_padding, left_padding=50, n_rows=5, n_cols=5, f
 
 def draw_cards(display, font, cards, top_padding, left_padding=50, n_rows=5, n_cols=5, frame_padding=100,
                card_padding=50, width=150, height=200):
-    for letter in list(cards.keys()):
+    for letter in cards.keys():
         letter_size = font.size(letter)
         value_size = font.size(str(cards[letter]))
         row = (ord(letter) - 65) // n_cols if ord(letter) < ord('Q') else (ord(letter) - 65 - 1) // n_cols
@@ -189,20 +160,27 @@ def run_kiitos():
             if event.type == pygame.QUIT:
                 running = False
                 print("Thanks for playing Kiitos with Peter and Andrea's card counter!")
-            screen.fill((255, 255, 255))
-            screen.blit(background, (0, 0))
-            screen.blit(headline, ((game_width - headline_size[0]) // 2, (top_padding - headline_size[1]) // 2))
 
-            new_card = ncd.detect()
-            if new_card is not None:
-                remaining_cards[new_card] -= 1
-                print(f'new card! {new_card}')
+        new_card = ncd.detect()
+        if new_card is not None:
+            if new_card in remaining_cards:
+                on_new_valid_card(new_card, remaining_cards)
+            else:
+                print(f"bad detection! {new_card}")
 
-            draw_rectangles(screen, top_padding)
-            draw_cards(screen, card_font, remaining_cards, top_padding)
-            pygame.display.flip()
-            # pygame.time.wait(sleep_time)
-            # time_count += sleep_time
+        screen.fill((255, 255, 255))
+        screen.blit(background, (0, 0))
+        screen.blit(headline, ((game_width - headline_size[0]) // 2, (top_padding - headline_size[1]) // 2))
+        draw_rectangles(screen, top_padding)
+        draw_cards(screen, card_font, remaining_cards, top_padding)
+        pygame.display.flip()
+
+        cv2.waitKey(10)
+
+
+def on_new_valid_card(new_card, remaining_cards):
+    remaining_cards[new_card] -= 1
+    print(f'new card! {new_card}')
 
 
 if __name__ == '__main__':
