@@ -1,3 +1,5 @@
+import numpy as np
+
 from ocr import GoogleOCR
 from video_capture import CaptureManager
 import cv2

@@ -1,10 +1,11 @@
+import argparse
 import random
+
 import cv2
 import numpy as np
 import pygame
 
 from tracking_and_detection import NewCardDetector
-
 
 pygame.init()
 game_width = 625
@@ -54,27 +55,15 @@ def reset_card_dict():
     return card_dict
 
 
-def update_cards(cards, random_update=False):
-    round_over = np.sum(np.asarray(list(cards.values()))) <= 0
-    if random_update and not round_over:
-        choice_var = random.randint(0, 99)
-        if choice_var > 90:
-            random_letter = chr(random.randint(65, 90))
-            while random_letter == 'Q' or cards[random_letter] == 0:
-                random_letter = chr(random.randint(65, 90))
-            cards[random_letter] -= 1
-    return round_over
-
-
 def draw_rectangles(display):
-    frame_width = frame_padding + n_cols*width + (n_cols + 1)*card_padding
-    frame_height = frame_padding + n_rows*height + (n_rows + 1)*card_padding
+    frame_width = frame_padding + n_cols * width + (n_cols + 1) * card_padding
+    frame_height = frame_padding + n_rows * height + (n_rows + 1) * card_padding
     card_frame = pygame.Rect(left_padding, top_padding, frame_width, frame_height)
     pygame.draw.rect(display, (0, 0, 255), card_frame, width=20, border_radius=80)
     for row in range(n_rows):
         for col in range(n_cols):
-            card_left = left_padding + frame_padding + col*width + col*card_padding
-            card_top = top_padding + frame_padding + row*height + row*card_padding
+            card_left = left_padding + frame_padding + col * width + col * card_padding
+            card_top = top_padding + frame_padding + row * height + row * card_padding
             card_rect = pygame.Rect(card_left, card_top, width, height)
             pygame.draw.rect(display, (0, 0, 255), card_rect)
 
@@ -85,12 +74,12 @@ def draw_cards(display, font, cards):
         value_size = font.size(str(cards[letter]))
         row = (ord(letter) - 65) // n_cols if ord(letter) < ord('Q') else (ord(letter) - 65 - 1) // n_cols
         col = (ord(letter) - 65) % n_rows if ord(letter) < ord('Q') else (ord(letter) - 65 - 1) % n_rows
-        card_left = left_padding + frame_padding + col*width + col*card_padding
+        card_left = left_padding + frame_padding + col * width + col * card_padding
         card_top = top_padding + frame_padding + row * height + row * card_padding
         text_left = card_left + (width - letter_size[0]) // 2
-        text_top = card_top + (height//2 - letter_size[1]) // 2
+        text_top = card_top + (height // 2 - letter_size[1]) // 2
         value_left = card_left + (width - value_size[0]) // 2
-        value_top = card_top + height//2 + (height//2 - value_size[1]) // 2
+        value_top = card_top + height // 2 + (height // 2 - value_size[1]) // 2
         letter_img = font.render(letter, True, (255, 255, 255))
         value_img = font.render(str(cards[letter]), True, (255, 255, 255))
         display.blit(letter_img, (text_left, text_top))
@@ -134,8 +123,19 @@ def draw_game_over(screen):
     pygame.display.flip()
 
 
+def on_new_valid_card(new_card, remaining_cards):
+    remaining_cards[new_card] -= 1
+    print(f'new card! {new_card}')
+
+
 def run_kiitos():
-    ncd = NewCardDetector()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--debug-vision')
+
+    args = parser.parse_args()
+
+    if args.debug_vision:
+        ncd = NewCardDetector()
     remaining_cards = reset_card_dict()
 
     screen = pygame.display.set_mode([game_width, game_height])
@@ -149,14 +149,23 @@ def run_kiitos():
                 running = False
                 print("Thanks for playing Kiitos with Peter and Andrea's card counter!")
 
-        # new_card = ncd.detect()
-        # if new_card is not None:
-        #     if new_card in remaining_cards:
-        #         on_new_valid_card(new_card, remaining_cards)
-        #     else:
-        #         print(f"bad detection! {new_card}")
+        if args.debug_vision:
+            new_card = ncd.detect()
+            if new_card is not None:
+                if new_card in remaining_cards:
+                    on_new_valid_card(new_card, remaining_cards)
+                else:
+                    print(f"bad detection! {new_card}")
+        else:
+            choice_var = random.randint(0, 99)
+            if choice_var > 90:
+                random_letter = chr(random.randint(65, 90))
+                while random_letter == 'Q' or remaining_cards[random_letter] == 0:
+                    random_letter = chr(random.randint(65, 90))
+                    on_new_valid_card(random_letter, remaining_cards)
 
-        round_over = update_cards(remaining_cards, random_update=True)
+        round_over = np.sum(np.asarray(list(remaining_cards.values()))) <= 0
+
         draw_board(screen, remaining_cards, round_count)
 
         if round_over:
@@ -169,11 +178,6 @@ def run_kiitos():
             pygame.time.wait(5000)
 
         cv2.waitKey(10)
-
-
-def on_new_valid_card(new_card, remaining_cards):
-    remaining_cards[new_card] -= 1
-    print(f'new card! {new_card}')
 
 
 if __name__ == '__main__':
