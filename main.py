@@ -122,9 +122,10 @@ def draw_game_over(screen):
     pygame.display.flip()
 
 
-def on_new_valid_card(new_card, remaining_cards):
+def on_new_valid_card(new_card, remaining_cards, print_card=False):
     remaining_cards[new_card] -= 1
-    print(f'new card! {new_card}')
+    if print_card:
+        print(f'new card! {new_card}')
 
 
 def run_kiitos():
@@ -152,7 +153,7 @@ def run_kiitos():
             new_card = ncd.detect()
             if new_card is not None:
                 if new_card in remaining_cards:
-                    on_new_valid_card(new_card, remaining_cards)
+                    on_new_valid_card(new_card, remaining_cards, print_card=True)
                 else:
                     print(f"bad detection! {new_card}")
         else:
@@ -161,7 +162,7 @@ def run_kiitos():
                 random_letter = chr(random.randint(65, 90))
                 while random_letter == 'Q' or remaining_cards[random_letter] == 0:
                     random_letter = chr(random.randint(65, 90))
-                    on_new_valid_card(random_letter, remaining_cards)
+                on_new_valid_card(random_letter, remaining_cards)
 
         round_over = np.sum(np.asarray(list(remaining_cards.values()))) <= 0
 
