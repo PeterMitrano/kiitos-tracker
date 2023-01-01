@@ -138,6 +138,7 @@ def run_kiitos():
     remaining_cards = reset_card_dict()
 
     screen = pygame.display.set_mode([game_width, game_height])
+    frame_surface = pygame.surfarray.make_surface(np.zeros([640, 480, 3]))
 
     round_count = 1
     game_over = False
@@ -149,7 +150,8 @@ def run_kiitos():
                 print("Thanks for playing Kiitos with Peter and Andrea's card counter!")
 
         if args.debug_vision:
-            new_card = ncd.detect()
+            new_card, annotated_frame = ncd.detect()
+            frame_surface = pygame.surfarray.make_surface(annotated_frame)
             if new_card is not None:
                 if new_card in remaining_cards:
                     on_new_valid_card(new_card, remaining_cards)
@@ -166,6 +168,7 @@ def run_kiitos():
         round_over = np.sum(np.asarray(list(remaining_cards.values()))) <= 0
 
         draw_board(screen, remaining_cards, round_count)
+        screen.blit(frame_surface, (0, 0))
 
         if round_over:
             if round_count < 3:
@@ -175,7 +178,7 @@ def run_kiitos():
             else:
                 game_over = True
 
-        cv2.waitKey(10)
+        # cv2.waitKey(10)
 
     game_over_splash = True
     while game_over_splash:

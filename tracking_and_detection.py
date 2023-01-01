@@ -40,7 +40,7 @@ class NewCardDetector:
 
         if self.ocr is not None:
             annotated_frame, detected_letters, detected_positions = self.ocr.detect(frame)
-            cv2.imshow('OCR', annotated_frame)
+            # cv2.imshow('OCR', annotated_frame)
 
             for letter, position in zip(detected_letters, detected_positions):
                 tracker_found = False
@@ -66,6 +66,6 @@ class NewCardDetector:
             for card_tracker in self.card_trackers:
                 if card_tracker.confidence > 0.9 and not card_tracker.reported:
                     card_tracker.reported = True
-                    return card_tracker.letter
+                    return card_tracker.letter, None
 
-        return None
+        return None, annotated_frame
