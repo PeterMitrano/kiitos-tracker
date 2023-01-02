@@ -1,14 +1,21 @@
 import argparse
 import random
 
-import cv2
 import numpy as np
 import pygame
 
 from tracking_and_detection import NewCardDetector
 
+workspace_bbox_color = (205, 25, 25)
+
 pygame.init()
-game_width = 625
+headline_font_size = 80
+img_w = 640
+img_h = 480
+img_padding = 10
+game_width = 625 + img_w + img_padding * 2
+img_x0 = game_width - 2 * img_padding - img_w
+img_y0 = img_padding + headline_font_size
 game_height = 900
 top_padding = 100
 left_padding = 25
@@ -20,7 +27,7 @@ width = 75
 height = 100
 background = pygame.image.load('img/background.jpg')
 background = pygame.transform.scale(background, (game_width + 500, game_height + 500))
-headline_font = pygame.font.SysFont(None, 80)
+headline_font = pygame.font.SysFont(None, headline_font_size)
 instruction_font = pygame.font.SysFont(None, 40)
 card_font = pygame.font.SysFont(None, 50)
 
@@ -86,24 +93,32 @@ def draw_cards(display, font, cards):
         display.blit(value_img, (value_left, value_top))
 
 
-def draw_board(screen, remaining_cards, round_count):
+def draw_board(screen, remaining_cards, round_count, workspace_bbox, annotated_image):
     screen.fill((255, 255, 255))
     screen.blit(background, (0, 0))
+    annotated_image = annotated_image.transpose([1, 0, 2])
+    annotated_image_surf = pygame.surfarray.make_surface(annotated_image)
+    screen.blit(annotated_image_surf, (img_x0, img_y0))
     draw_rectangles(screen)
     headline_size = headline_font.size(f'Kiitos: Round {round_count}')
     headline = headline_font.render(f'Kiitos: Round {round_count}', True, (0, 0, 255))
     screen.blit(headline, ((game_width - headline_size[0]) // 2, (top_padding - headline_size[1]) // 2))
     draw_cards(screen, card_font, remaining_cards)
+    workspace_w = workspace_bbox[1, 0] - workspace_bbox[0, 0]
+    workspace_h = workspace_bbox[1, 1] - workspace_bbox[0, 1]
+    workspace_rect = pygame.Rect(img_x0 + workspace_bbox[0, 0], img_y0 + workspace_bbox[0, 1], workspace_w, workspace_h)
+    pygame.draw.rect(screen, workspace_bbox_color, workspace_rect, width=2)
+
     pygame.display.flip()
 
 
-def draw_round_reset(screen, remaining_cards, round_count):
+def draw_round_reset(screen, remaining_cards, workspace_bbox, round_count, annotated_image):
     round_over_size = instruction_font.size(f'Round {round_count} over! Reset the playing area.')
     round_over_text = instruction_font.render(f'Round {round_count} over! Reset the playing area.', True, (0, 0, 255))
     countdown = 5
     interval = 1000
     for i in range(countdown):
-        draw_board(screen, remaining_cards, round_count)
+        draw_board(screen, remaining_cards, workspace_bbox, round_count, annotated_image)
         countdown_size = instruction_font.size(f'Starting the next round in...{countdown - i}')
         countdown_text = instruction_font.render(f'Starting the next round in...{countdown - i}', True, (0, 0, 255))
         screen.blit(round_over_text, ((game_width - round_over_size[0]) // 2,
@@ -117,8 +132,6 @@ def draw_round_reset(screen, remaining_cards, round_count):
 def draw_game_over(screen):
     screen.fill((255, 255, 255))
     screen.blit(background, (0, 0))
-    # card_frame = pygame.Rect(left_padding, top_padding, frame_width, frame_height)
-    # pygame.draw.rect(screen, (0, 0, 255), card_frame, width=20, border_radius=80)
     pygame.display.flip()
 
 
@@ -139,9 +152,14 @@ def run_kiitos():
     remaining_cards = reset_card_dict()
 
     screen = pygame.display.set_mode([game_width, game_height])
-    frame_surface = pygame.surfarray.make_surface(np.zeros([640, 480, 3]))
+
+    workspace_bbox = np.array([
+        [50, 90],
+        [600, 410],
+    ])
 
     round_count = 1
+    annotated_image = np.zeros([img_h, img_w, 3])
     game_over = False
     running = True
     while running and not game_over:
@@ -151,8 +169,7 @@ def run_kiitos():
                 print("Thanks for playing Kiitos with Peter and Andrea's card counter!")
 
         if args.debug_vision:
-            new_card, annotated_frame = ncd.detect()
-            frame_surface = pygame.surfarray.make_surface(annotated_frame)
+            new_card, annotated_image = ncd.detect(workspace_bbox)
             if new_card is not None:
                 if new_card in remaining_cards:
                     on_new_valid_card(new_card, remaining_cards, print_card=True)
@@ -168,12 +185,11 @@ def run_kiitos():
 
         round_over = np.sum(np.asarray(list(remaining_cards.values()))) <= 0
 
-        draw_board(screen, remaining_cards, round_count)
-        screen.blit(frame_surface, (0, 0))
+        draw_board(screen, remaining_cards, round_count, workspace_bbox, annotated_image)
 
         if round_over:
             if round_count < 3:
-                draw_round_reset(screen, remaining_cards, round_count)
+                draw_round_reset(screen, remaining_cards, round_count, workspace_bbox, annotated_image)
                 round_count += 1
                 remaining_cards = reset_card_dict()
             else:
