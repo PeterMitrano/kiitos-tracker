@@ -108,6 +108,6 @@ class GoogleOCR:
                             text_and_vertices.append((symbol.text, symbol.bounding_box.vertices))
 
         letters, positions, valid_text_and_vertices = filter_non_cards(text_and_vertices, workspace_bbox)
-        annotated = annotate(input_img, text_and_vertices)
+        annotated = annotate(input_img, valid_text_and_vertices)
 
         return annotated, letters, positions
