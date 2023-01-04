@@ -6,7 +6,11 @@ import time
 import numpy as np
 import pygame
 
+pygame.init()
+
 from tracking_and_detection import NewCardDetector
+from ui import ButtonState, instruction_font, card_font, WHITE, GRAY, BLACK, BLUE, instructions_font_size, Button, \
+    PopUp, PopUpState, Align
 
 UNDO_EXPIRE_MILLIS = 3000
 
@@ -20,20 +24,12 @@ class GameState(enum.Enum):
     OVER = enum.auto()
 
 
-class UndoState(enum.Enum):
-    HIDING = enum.auto()
-    WAITING = enum.auto()
-    SHOWING = enum.auto()
-
-
 workspace_bbox_color = (205, 25, 25)
 workspace_bbox = np.array([
     [50, 140],
     [600, 310],
 ])
 
-pygame.init()
-button_padding = 4
 headline_font_size = 80
 img_w = 640
 img_h = 480
@@ -52,25 +48,16 @@ card_padding = 25
 width = 75
 height = 100
 countdown = 3
-undo_x = 190
 text_padding = 10
-undo_x2 = left_padding + undo_x + text_padding
+undo_x2 = left_padding + text_padding
+approx_undo_text_w = 300
 undo_y2 = int(game_height // 2)
-undo_str2_w = 820
-undo_button_w = 90
-undo_button_h = 28
 interval = 500
 background = pygame.image.load('img/background.jpg')
 background = pygame.transform.scale(background, (game_width + 500, game_height + 500))
 headline_font = pygame.font.SysFont(None, headline_font_size)
-instructions_font_size = 40
 undo_y = game_height - bottom_padding - instructions_font_size
-instruction_font = pygame.font.SysFont(None, instructions_font_size)
-card_font = pygame.font.SysFont(None, 50)
-WHITE = (255, 255, 255)
-GRAY = (199, 201, 194)
-BLACK = (0, 0, 0)
-BLUE = (38, 47, 78)
+undo_popup_str = "Press the letter you played, or ESCAPE if no card was played"
 
 notification_sound = pygame.mixer.Sound("notification.wav")
 notification_sound.set_volume(0.25)
@@ -115,7 +102,6 @@ class Kiitos:
         self.screen = pygame.display.set_mode([game_width, game_height])
         self.remaining_cards = reset_card_dict()
         self.state = GameState.PLAYING
-        self.undo_state = UndoState.HIDING
         self.round_count = 1
         self.annotated_image = np.ones([img_h, img_w, 3]) * 128
         self.ncd = None
@@ -123,10 +109,12 @@ class Kiitos:
         if self.debug_vision:
             self.ncd = NewCardDetector()
 
-        self.undo_rect = pygame.Rect(left_padding + undo_x, game_height - bottom_padding - instructions_font_size,
-                                     undo_button_w, undo_button_h)
-        self.undo_rect2 = pygame.Rect(undo_x2 - button_padding, undo_y2 - button_padding,
-                                      undo_str2_w + 2 * button_padding, undo_button_h + 2 * button_padding)
+        self.undo_popup = PopUp(undo_popup_str, game_width / 2, game_height / 2)
+        self.undo_popup.x_align = Align.MIDDLE
+
+        undo_x = left_padding + approx_undo_text_w
+        self.undo_button = Button("undo", undo_x, undo_y)
+        self.undo_button.set_state(ButtonState.HIDING)
 
     def run(self):
         while self.state != GameState.OVER:
@@ -138,22 +126,23 @@ class Kiitos:
                 elif event.type == pygame.KEYDOWN:
                     key_pressed = event.unicode
                     if self.state == GameState.CORRECTING:
-                        self.undo_last_decrement()
                         if key_pressed == ESCAPE:
+                            self.undo_last_decrement()
                             self.state = GameState.PLAYING
-                        else:
+                            self.undo_popup.set_state(PopUpState.HIDING)
+                        elif key_pressed.upper() in self.remaining_cards:
+                            self.undo_last_decrement()
+                            self.undo_popup.set_state(PopUpState.HIDING)
                             self.state = GameState.MANUAL_LETTER
-                            manual_letter = event.unicode.upper()
+                            manual_letter = key_pressed.upper()
                     else:
                         self.state = GameState.MANUAL_LETTER
-                        manual_letter = event.unicode.upper()
+                        manual_letter = key_pressed.upper()
                 elif event.type == UNDO_EXPIRED_EVENT:
-                    self.undo_state = UndoState.WAITING
+                    self.undo_button.set_state(ButtonState.WAITING)
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    mouse_pos = pygame.mouse.get_pos()
-                    if self.undo_rect.collidepoint(*mouse_pos):
+                    if self.undo_button.pressed():
                         self.state = GameState.CORRECTING
-                        self.undo_state = UndoState.WAITING
 
             self.handle_state(manual_letter)
 
@@ -187,17 +176,15 @@ class Kiitos:
                 self.on_new_valid_card(manual_letter)
             self.state = GameState.PLAYING
         elif self.state == GameState.CORRECTING:
-            pass
+            self.undo_popup.set_state(PopUpState.SHOWING)
         elif self.state == GameState.OVER:
             if self.round_count < 3:
                 self.draw_round_reset()
                 self.round_count += 1
                 self.remaining_cards = reset_card_dict()
-            else:
-                game_over = True
 
-        if self.undo_state == UndoState.WAITING and self.state == GameState.PLAYING:
-            self.undo_state = UndoState.HIDING
+        if self.undo_button.state == ButtonState.WAITING and self.state == GameState.PLAYING:
+            self.undo_button.set_state(ButtonState.HIDING)
 
     def end_game(self):
         game_over_splash = True
@@ -257,22 +244,17 @@ class Kiitos:
         manual_instructions = instruction_font.render('Press any key to manually decrement the count', True, BLACK)
         self.screen.blit(manual_instructions, (left_padding, game_height - bottom_padding - 2 * instructions_font_size))
 
-        if self.state == GameState.CORRECTING:
-            button_color = GRAY
-        else:
-            button_color = BLACK
-
-        if self.undo_state != UndoState.HIDING:
+        if self.undo_button.state != ButtonState.HIDING:
             undo_instructions = instruction_font.render(f'You played {self.latest_letter}', True, BLACK)
             self.screen.blit(undo_instructions, (left_padding, undo_y))
-            self.screen.fill(button_color, self.undo_rect)
-            undo_text = instruction_font.render('undo', True, WHITE)
-            self.screen.blit(undo_text, (left_padding + undo_x + text_padding, undo_y))
-        if self.undo_state == UndoState.WAITING:
-            self.screen.fill(BLACK, self.undo_rect2)
-            undo_str2 = 'Press the letter you played, or ESCAPE if no card was played'
-            undo_text2 = instruction_font.render(undo_str2, True, WHITE)
-            self.screen.blit(undo_text2, (undo_x2, undo_y2))
+        #
+        # if self.state == GameState.CORRECTING:
+        #     undo_text2 = instruction_font.render(undo_str2, True, WHITE)
+        #     self.screen.blit(undo_text2, (left_padding + text_padding, undo_y))
+        #     self.screen.fill(BLACK, self.undo_rect2)
+
+        self.undo_popup.draw(self.screen)
+        self.undo_button.draw(self.screen)
 
         pygame.display.flip()
 
@@ -314,7 +296,7 @@ class Kiitos:
         self.latest_letter = new_card
         pygame.mixer.Sound.play(notification_sound)
 
-        self.undo_state = UndoState.SHOWING
+        self.undo_button.set_state(ButtonState.SHOWING)
         pygame.time.set_timer(UNDO_EXPIRED_EVENT, UNDO_EXPIRE_MILLIS, loops=1)
 
         if print_card:
