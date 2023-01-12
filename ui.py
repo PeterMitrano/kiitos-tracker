@@ -3,11 +3,14 @@ import enum
 import pygame
 
 instructions_font_size = 40
+workspace_instructions_font_size = 32
 instruction_font = pygame.font.SysFont(None, instructions_font_size)
+workspace_instruction_font = pygame.font.SysFont(None, workspace_instructions_font_size)
 card_font = pygame.font.SysFont(None, 50)
 WHITE = (255, 255, 255)
 GRAY = (199, 201, 194)
 BLACK = (0, 0, 0)
+RED = (250, 30, 40)
 BLUE = (38, 47, 78)
 
 
@@ -19,16 +22,16 @@ class Align(enum.Enum):
 
 class TextBox:
 
-    def __init__(self, text, x, y):
+    def __init__(self, text, x, y, x_align=Align.BEGIN, y_align=Align.BEGIN):
         self.text_color = WHITE
         self.text = text
         self.x = x
         self.y = y
-        self.padding = 4
-        self.x_align = Align.BEGIN
-        self.y_align = Align.BEGIN
+        self.padding = 5
+        self.x_align = x_align
+        self.y_align = y_align
         self.text_surf = instruction_font.render(self.text, True, self.text_color)
-        self.h = self.text_surf.get_height() + 2 * self.padding
+        self.h = self.text_surf.get_height()
         self.text_w = self.text_surf.get_width()
         self.rect = None
         self.update_align()
@@ -53,7 +56,8 @@ class TextBox:
             self.align_y = -self.text_surf.get_width()
 
     def update_rect(self):
-        self.rect = pygame.Rect(self.x - self.padding + self.align_x, self.y - self.padding + self.align_y, self.text_w + 2 * self.padding, self.h + 2 * self.padding)
+        self.rect = pygame.Rect(self.x - self.padding + self.align_x, self.y - self.padding + self.align_y,
+                                self.text_w + 2 * self.padding, self.h + 2 * self.padding)
 
     def pressed(self):
         mouse_pos = pygame.mouse.get_pos()
@@ -70,8 +74,8 @@ class ButtonState(enum.Enum):
 
 class Button(TextBox):
 
-    def __init__(self, text, x, y):
-        super().__init__(text, x, y)
+    def __init__(self, text, x, y, x_align=Align.BEGIN, y_align=Align.BEGIN):
+        super().__init__(text, x, y, x_align, y_align)
         self.state = ButtonState.SHOWING
 
     def draw(self, screen):
@@ -100,8 +104,8 @@ class PopUpState(enum.Enum):
 
 class PopUp(TextBox):
 
-    def __init__(self, text, x, y):
-        super().__init__(text, x, y)
+    def __init__(self, text, x, y, x_align=Align.BEGIN, y_align=Align.BEGIN):
+        super().__init__(text, x, y, x_align, y_align)
         self.state = PopUpState.HIDING
         self.background_color = BLACK
 
@@ -111,3 +115,24 @@ class PopUp(TextBox):
 
     def set_state(self, state):
         self.state = state
+
+
+class ConfirmPopUp:
+
+    def __init__(self, text, x, y, x_align, y_align):
+        self.popup = PopUp(text, x, y, x_align, y_align)
+        self.button = Button("Ready", x, y + self.popup.h, x_align, y_align)
+
+    def draw(self, screen):
+        self.popup.draw(screen)
+        if self.popup.state == PopUpState.SHOWING:
+            self.button.draw(screen)
+
+    def set_state(self, state):
+        self.popup.state = state
+
+    def pressed(self):
+        pressed = self.button.pressed()
+        if pressed:
+            self.popup.set_state(PopUpState.HIDING)
+        return pressed

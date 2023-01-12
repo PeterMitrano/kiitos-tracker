@@ -7,6 +7,9 @@
       <excludeFolder url="file://$MODULE_DIR$/backgrounds" />
       <excludeFolder url="file://$MODULE_DIR$/img" />
       <excludeFolder url="file://$MODULE_DIR$/mask" />
+      <excludeFolder url="file://$MODULE_DIR$/test_images" />
+      <excludeFolder url="file://$MODULE_DIR$/detections" />
+      <excludeFolder url="file://$MODULE_DIR$/labelbox" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

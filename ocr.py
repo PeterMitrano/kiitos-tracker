@@ -13,10 +13,6 @@ bbox_annotation_color = (0, 0, 255)
 baseline_annotation_color = (0, 255, 0)
 
 
-def vertex2tuple(v):
-    return v.x, v.y
-
-
 def fix_common_misdetections(text):
     common_misdetections = {
         '0': 'O',
@@ -25,8 +21,11 @@ def fix_common_misdetections(text):
     return common_misdetections.get(text, text)
 
 
-def in_bbox(p, bbox):
-    return bbox[0, 0] < p[0] < bbox[1, 0] and bbox[0, 1] < p[1] < bbox[1, 1]
+def in_bbox(vertices, bbox):
+    for p in vertices:
+        if not (bbox[0, 0] < p[0] < bbox[1, 0] and bbox[0, 1] < p[1] < bbox[1, 1]):
+            return False
+    return True
 
 
 def filter_non_cards(text_and_vertices, workspace_bbox):
@@ -34,9 +33,9 @@ def filter_non_cards(text_and_vertices, workspace_bbox):
     positions = []
     valid_text_and_vertices = []
     for text, vertices in text_and_vertices:
-        left_top = vertex2tuple(vertices[0])
-        right_bottom = vertex2tuple(vertices[2])
-        left_bottom = vertex2tuple(vertices[3])
+        left_top = vertices[0]
+        right_bottom = vertices[2]
+        left_bottom = vertices[3]
         text_w = abs(right_bottom[0] - left_top[0])
         text_h = abs(right_bottom[1] - left_top[1])
         text_area = text_w * text_h
@@ -52,7 +51,7 @@ def filter_non_cards(text_and_vertices, workspace_bbox):
             continue
         if text_area < MAX_TEXT_AREA:
             continue
-        if not in_bbox(position, workspace_bbox):
+        if not in_bbox(vertices, workspace_bbox):
             continue
         if not re.search(r'([a-z]|[A-Z])', text):
             continue
@@ -69,9 +68,9 @@ def filter_non_cards(text_and_vertices, workspace_bbox):
 def annotate(input_img, text_and_vertices):
     annotated = input_img.copy()
     for letter, vertices in text_and_vertices:
-        left_top = vertex2tuple(vertices[0])
-        right_bottom = vertex2tuple(vertices[2])
-        left_bottom = vertex2tuple(vertices[3])
+        left_top = vertices[0]
+        right_bottom = vertices[2]
+        left_bottom = vertices[3]
         text_pos = (left_top[0] + 5, left_top[1] - 25)
 
         annotated = cv2.rectangle(annotated, left_top, right_bottom, bbox_annotation_color, 1)
@@ -105,7 +104,8 @@ class GoogleOCR:
                         for symbol in word.symbols:
                             if symbol.confidence < 0.4:
                                 continue
-                            text_and_vertices.append((symbol.text, symbol.bounding_box.vertices))
+                            vertices_np = np.array([[v.x, v.y] for v in symbol.bounding_box.vertices])
+                            text_and_vertices.append((symbol.text, vertices_np))
 
         letters, positions, valid_text_and_vertices = filter_non_cards(text_and_vertices, workspace_bbox)
         annotated = annotate(input_img, valid_text_and_vertices)

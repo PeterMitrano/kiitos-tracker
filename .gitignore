@@ -1,4 +1,7 @@
 *.zip
+*.pt
+labelbox
+detections
 raw_data
 data
 venv

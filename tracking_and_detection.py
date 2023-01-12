@@ -33,7 +33,7 @@ class NewCardDetector:
 
     def __init__(self):
         self.card_trackers = []
-        self.cap = cv2.VideoCapture(2)
+        self.cap = cv2.VideoCapture(0)
         self.cap_manager = CaptureManager(self.cap)
         while self.cap_manager.last_frame is None:
             time.sleep(1)

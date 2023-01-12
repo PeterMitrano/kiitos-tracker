@@ -10,7 +10,7 @@ pygame.init()
 
 from tracking_and_detection import NewCardDetector
 from ui import ButtonState, instruction_font, card_font, WHITE, GRAY, BLACK, BLUE, instructions_font_size, Button, \
-    PopUp, PopUpState, Align
+    PopUp, PopUpState, Align, RED, workspace_instruction_font, ConfirmPopUp
 
 UNDO_EXPIRE_MILLIS = 3000
 
@@ -21,13 +21,14 @@ class GameState(enum.Enum):
     PLAYING = enum.auto()
     MANUAL_LETTER = enum.auto()
     CORRECTING = enum.auto()
-    OVER = enum.auto()
+    GAME_OVER = enum.auto()
+    ROUND_OVER = enum.auto()
 
 
 workspace_bbox_color = (205, 25, 25)
 workspace_bbox = np.array([
-    [50, 140],
-    [600, 310],
+    [40, 100],
+    [610, 400],
 ])
 
 headline_font_size = 80
@@ -48,16 +49,13 @@ card_padding = 25
 width = 75
 height = 100
 countdown = 3
-text_padding = 10
-undo_x2 = left_padding + text_padding
-approx_undo_text_w = 300
-undo_y2 = int(game_height // 2)
-interval = 500
+approx_undo_text_w = 300  # approx because the undo string is variable length
 background = pygame.image.load('img/background.jpg')
 background = pygame.transform.scale(background, (game_width + 500, game_height + 500))
 headline_font = pygame.font.SysFont(None, headline_font_size)
 undo_y = game_height - bottom_padding - instructions_font_size
 undo_popup_str = "Press the letter you played, or ESCAPE if no card was played"
+round_over_popup_str = "Round over! Reset the playing area"
 
 notification_sound = pygame.mixer.Sound("notification.wav")
 notification_sound.set_volume(0.25)
@@ -109,19 +107,21 @@ class Kiitos:
         if self.debug_vision:
             self.ncd = NewCardDetector()
 
-        self.undo_popup = PopUp(undo_popup_str, game_width / 2, game_height / 2)
-        self.undo_popup.x_align = Align.MIDDLE
+        self.undo_popup = PopUp(undo_popup_str, game_width / 2, game_height / 2, Align.MIDDLE, Align.MIDDLE)
+
+        self.round_over_popup = ConfirmPopUp(round_over_popup_str, game_width / 2, game_height / 2,
+                                             Align.MIDDLE, Align.MIDDLE)
 
         undo_x = left_padding + approx_undo_text_w
         self.undo_button = Button("undo", undo_x, undo_y)
         self.undo_button.set_state(ButtonState.HIDING)
 
     def run(self):
-        while self.state != GameState.OVER:
+        while self.state != GameState.GAME_OVER:
             manual_letter = None
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    self.state = GameState.OVER
+                    self.state = GameState.GAME_OVER
                     print("Thanks for playing Kiitos with Peter and Andrea's card counter!")
                 elif event.type == pygame.KEYDOWN:
                     key_pressed = event.unicode
@@ -135,7 +135,7 @@ class Kiitos:
                             self.undo_popup.set_state(PopUpState.HIDING)
                             self.state = GameState.MANUAL_LETTER
                             manual_letter = key_pressed.upper()
-                    else:
+                    elif self.state == GameState.PLAYING:
                         self.state = GameState.MANUAL_LETTER
                         manual_letter = key_pressed.upper()
                 elif event.type == UNDO_EXPIRED_EVENT:
@@ -143,10 +143,12 @@ class Kiitos:
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if self.undo_button.pressed():
                         self.state = GameState.CORRECTING
+                    if self.round_over_popup.pressed():
+                        self.round_count += 1
+                        self.remaining_cards = reset_card_dict()
+                        self.state = GameState.PLAYING
 
             self.handle_state(manual_letter)
-
-            self.draw_board()
 
             time.sleep(0.1)
 
@@ -155,7 +157,7 @@ class Kiitos:
     def handle_state(self, manual_letter):
         if self.state == GameState.PLAYING:
             if self.debug_vision:
-                new_card, annotated_image = self.ncd.detect(workspace_bbox)
+                new_card, self.annotated_image = self.ncd.detect(workspace_bbox)
                 if new_card is not None:
                     if new_card in self.remaining_cards:
                         self.on_new_valid_card(new_card, print_card=True)
@@ -163,25 +165,31 @@ class Kiitos:
                     print(f"bad detection! {new_card}")
             else:
                 choice_var = random.randint(0, 99)
-                if choice_var > 98:
+                if choice_var > 1:
                     random_letter = chr(random.randint(65, 90))
                     while random_letter == 'Q' or self.remaining_cards[random_letter] == 0:
                         random_letter = chr(random.randint(65, 90))
                     self.on_new_valid_card(random_letter)
             round_over = np.sum(np.asarray(list(self.remaining_cards.values()))) <= 0
             if round_over:
-                self.state = GameState.OVER
+                if self.round_count < 3:
+                    self.state = GameState.ROUND_OVER
+                    self.round_over_popup.set_state(PopUpState.SHOWING)
+                else:
+                    self.state = GameState.GAME_OVER
+
         elif self.state == GameState.MANUAL_LETTER:
             if manual_letter in self.remaining_cards:
                 self.on_new_valid_card(manual_letter)
             self.state = GameState.PLAYING
         elif self.state == GameState.CORRECTING:
             self.undo_popup.set_state(PopUpState.SHOWING)
-        elif self.state == GameState.OVER:
-            if self.round_count < 3:
-                self.draw_round_reset()
-                self.round_count += 1
-                self.remaining_cards = reset_card_dict()
+        elif self.state == GameState.ROUND_OVER:
+            pass
+        elif self.state == GameState.GAME_OVER:
+            pass
+
+        self.draw_board()
 
         if self.undo_button.state == ButtonState.WAITING and self.state == GameState.PLAYING:
             self.undo_button.set_state(ButtonState.HIDING)
@@ -199,7 +207,7 @@ class Kiitos:
         frame_width = frame_padding + n_cols * width + (n_cols + 1) * card_padding
         frame_height = frame_padding + n_rows * height + (n_rows + 1) * card_padding
         card_frame = pygame.Rect(left_padding, top_padding, frame_width, frame_height)
-        pygame.draw.rect(self.screen, BLUE, card_frame, width=20, border_radius=80)
+        pygame.draw.rect(self.screen, BLUE, card_frame, width=20, border_radius=40)
         for row in range(n_rows):
             for col in range(n_cols):
                 card_left = left_padding + frame_padding + col * width + col * card_padding
@@ -227,8 +235,8 @@ class Kiitos:
     def draw_board(self):
         self.screen.fill(WHITE)
         self.screen.blit(background, (0, 0))
-        annotated_image = self.annotated_image.transpose([1, 0, 2])
-        annotated_image_surf = pygame.surfarray.make_surface(annotated_image)
+        annotated_image_t = self.annotated_image.transpose([1, 0, 2])
+        annotated_image_surf = pygame.surfarray.make_surface(annotated_image_t)
         self.screen.blit(annotated_image_surf, (img_x0, img_y0))
         self.draw_rectangles()
         headline_size = headline_font.size(f'Kiitos: Round {self.round_count}')
@@ -237,8 +245,12 @@ class Kiitos:
         self.draw_cards(card_font)
         workspace_w = workspace_bbox[1, 0] - workspace_bbox[0, 0]
         workspace_h = workspace_bbox[1, 1] - workspace_bbox[0, 1]
-        workspace_rect = pygame.Rect(img_x0 + workspace_bbox[0, 0], img_y0 + workspace_bbox[0, 1], workspace_w,
-                                     workspace_h)
+        workspace_x0 = img_x0 + workspace_bbox[0, 0]
+        workspace_y0 = img_y0 + workspace_bbox[0, 1]
+        workspace_y1 = workspace_y0 + workspace_h
+        workspace_rect = pygame.Rect(workspace_x0, workspace_y0, workspace_w, workspace_h)
+        workspace_instructions = workspace_instruction_font.render('Keep cards inside', True, RED)
+        self.screen.blit(workspace_instructions, (workspace_x0, workspace_y1))
         pygame.draw.rect(self.screen, workspace_bbox_color, workspace_rect, width=2)
 
         manual_instructions = instruction_font.render('Press any key to manually decrement the count', True, BLACK)
@@ -247,33 +259,23 @@ class Kiitos:
         if self.undo_button.state != ButtonState.HIDING:
             undo_instructions = instruction_font.render(f'You played {self.latest_letter}', True, BLACK)
             self.screen.blit(undo_instructions, (left_padding, undo_y))
-        #
-        # if self.state == GameState.CORRECTING:
-        #     undo_text2 = instruction_font.render(undo_str2, True, WHITE)
-        #     self.screen.blit(undo_text2, (left_padding + text_padding, undo_y))
-        #     self.screen.fill(BLACK, self.undo_rect2)
 
         self.undo_popup.draw(self.screen)
         self.undo_button.draw(self.screen)
+        self.round_over_popup.draw(self.screen)
 
         pygame.display.flip()
 
     def draw_round_reset(self):
-        round_over_size = instruction_font.size(f'Round {self.round_count} over! Reset the playing area.')
-        round_over_text = instruction_font.render(f'Round {self.round_count} over! Reset the playing area.', True, BLUE)
-
-        for i in range(countdown):
-            self.draw_board()
-            countdown_size = instruction_font.size(f'Starting the next round in...{countdown - i}')
-            countdown_text = instruction_font.render(f'Starting the next round in...{countdown - i}', True, BLUE)
-            self.screen.blit(round_over_text, ((game_width - round_over_size[0]) // 2,
-                                               game_height - top_padding + (
-                                                       top_padding // 2 - round_over_size[1]) // 2))
-            self.screen.blit(countdown_text, ((game_width - countdown_size[0]) // 2,
-                                              game_height - top_padding // 2 + (
-                                                      top_padding // 2 - countdown_size[1]) // 2))
-            pygame.self.screen.flip()
-            pygame.time.wait(interval)
+        pass
+        # round_over_size = instruction_font.size(f'Round {self.round_count} over! Reset the playing area.')
+        # round_over_text = instruction_font.render(f'Round {self.round_count} over! Reset the playing area.', True, BLUE)
+        #
+        # countdown_size = instruction_font.size(f'Starting the next round in...{countdown - i}')
+        # countdown_text = instruction_font.render(f'Starting the next round in...{countdown - i}', True, BLUE)
+        # self.screen.blit(round_over_text, ((game_width - round_over_size[0]) // 2, game_height - top_padding + (top_padding // 2 - round_over_size[1]) // 2))
+        # self.screen.blit(countdown_text, ((game_width - countdown_size[0]) // 2, game_height - top_padding // 2 + (top_padding // 2 - countdown_size[1]) // 2))
+        # pygame.display.flip()
 
     def draw_game_over(self):
         self.screen.fill(GRAY)
