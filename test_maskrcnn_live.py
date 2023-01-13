@@ -4,9 +4,9 @@ from time import perf_counter
 import PIL.Image
 import cv2
 import numpy as np
-import torch
 
-from cnn_ocr import load_model, filter_nms, label_to_letter, box_to_vertices
+from cnn_ocr import load_model, filter_nms, get_predictions, \
+    predictions_to_text_and_vertices
 from ocr import annotate
 from video_capture import CaptureManager
 
@@ -28,23 +28,11 @@ def main():
         pil_img = PIL.Image.fromarray(np_img).resize((640, 480)).rotate(180)
 
         t0 = perf_counter()
-        real_test_img_np = np.transpose(np.array(pil_img), [2, 0, 1])
-        real_img_tensor = torch.tensor(real_test_img_np).float()
-        real_img_tensor = real_img_tensor / real_img_tensor.max()
-
-        with torch.no_grad():
-            real_prediction = model([real_img_tensor])
-        real_prediction = real_prediction[0]
+        real_prediction = get_predictions(model, np.array(pil_img))
         dt = perf_counter() - t0
 
-        filter_nms(real_prediction)
-
-        valid_text_and_vertices = []
-        for box, score, label in zip(real_prediction['boxes'], real_prediction['scores'], real_prediction['labels']):
-            letter = label_to_letter(label)
-            vertices = box_to_vertices(box.numpy().squeeze().astype(int))
-            valid_text_and_vertices.append((letter, vertices))
-        annotated = annotate(np.array(pil_img), valid_text_and_vertices)
+        text_and_vertices = predictions_to_text_and_vertices(real_prediction)
+        annotated = annotate(np.array(pil_img), text_and_vertices)
 
         cv2.imshow('annotated', annotated)
 

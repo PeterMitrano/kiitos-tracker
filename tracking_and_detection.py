@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 
 import annotation
+from cnn_ocr import CNNOCR
 from ocr import GoogleOCR
 from video_capture import CaptureManager
 
@@ -38,7 +39,8 @@ class NewCardDetector:
         while self.cap_manager.last_frame is None:
             time.sleep(1)
 
-        self.ocr = GoogleOCR()
+        # self.ocr = GoogleOCR()
+        self.ocr = CNNOCR()
 
     def detect(self, workspace_bbox):
         frame = self.cap_manager.last_frame

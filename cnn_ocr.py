@@ -1,9 +1,14 @@
+import pathlib
+
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torchvision
 from torchvision.models.detection import MaskRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
+
+from ocr import filter_non_cards, annotate
 
 
 def label_to_letter(label):
@@ -83,3 +88,40 @@ def box_to_vertices(box):
     left_bottom = (x1, y2)
     vertices = [left_top, right_top, right_bottom, left_bottom]
     return vertices
+
+
+def get_predictions(model, input_img):
+    real_test_img_np = np.transpose(input_img, [2, 0, 1])
+    real_img_tensor = torch.tensor(real_test_img_np).float()
+    real_img_tensor = real_img_tensor / real_img_tensor.max()
+    with torch.no_grad():
+        real_prediction = model([real_img_tensor])
+    real_prediction = real_prediction[0]
+    filter_nms(real_prediction)
+    return real_prediction
+
+
+class CNNOCR:
+
+    def __init__(self):
+        model_path = pathlib.Path("model-6.pt")
+        self.model = load_model(model_path)
+
+    def detect(self, input_img, workspace_bbox):
+        predictions = get_predictions(self.model, input_img)
+
+        text_and_vertices = predictions_to_text_and_vertices(predictions)
+
+        letters, positions, valid_text_and_vertices = filter_non_cards(text_and_vertices, workspace_bbox)
+        annotated = annotate(input_img, valid_text_and_vertices)
+
+        return annotated, letters, positions
+
+
+def predictions_to_text_and_vertices(real_prediction):
+    text_and_vertices = []
+    for box, score, label in zip(real_prediction['boxes'], real_prediction['scores'], real_prediction['labels']):
+        letter = label_to_letter(label)
+        vertices = box_to_vertices(box.numpy().squeeze().astype(int))
+        text_and_vertices.append((letter, vertices))
+    return text_and_vertices
