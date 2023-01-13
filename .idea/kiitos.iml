@@ -10,6 +10,8 @@
       <excludeFolder url="file://$MODULE_DIR$/test_images" />
       <excludeFolder url="file://$MODULE_DIR$/detections" />
       <excludeFolder url="file://$MODULE_DIR$/labelbox" />
+      <excludeFolder url="file://$MODULE_DIR$/test_images2" />
+      <excludeFolder url="file://$MODULE_DIR$/test_images3" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

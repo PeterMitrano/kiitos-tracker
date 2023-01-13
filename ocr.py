@@ -71,11 +71,10 @@ def annotate(input_img, text_and_vertices):
         left_top = vertices[0]
         right_bottom = vertices[2]
         left_bottom = vertices[3]
-        text_pos = (left_top[0] + 5, left_top[1] - 25)
+        text_pos = (left_top[0] + 5, left_top[1] - 15)
 
         annotated = cv2.rectangle(annotated, left_top, right_bottom, bbox_annotation_color, 1)
-        annotated = cv2.putText(annotated, letter, text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.5, bbox_annotation_color, 1)
-        annotation.text(annotated, letter, text_pos, 0.5, bbox_annotation_color, 1)
+        annotation.text(annotated, letter, text_pos, 1, bbox_annotation_color, 3)
         annotated = cv2.line(annotated, left_bottom, right_bottom, baseline_annotation_color, 5)
     return annotated
 
