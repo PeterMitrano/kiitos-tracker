@@ -11,7 +11,7 @@ from cnn_ocr import load_model, filter_nms, viz_plt
 
 
 def main():
-    model_path = pathlib.Path("model-5.pt")
+    model_path = pathlib.Path("model-6.pt")
     model = load_model(model_path)
 
     outdir = pathlib.Path('detections')

@@ -61,7 +61,6 @@ def viz_plt(viz_img, viz_inputs, seperate_masks=False, n_show=5):
 
     main_ax.imshow(viz_img.numpy().transpose(1, 2, 0))
 
-    # print('labels', viz_inputs['labels'])
     for i in range(n_show):
         box = viz_inputs['boxes'][i].cpu().numpy()
         mask = viz_inputs['masks'][i].cpu()
@@ -76,8 +75,8 @@ def viz_plt(viz_img, viz_inputs, seperate_masks=False, n_show=5):
         main_ax.plot([box[0], box[2], box[2], box[0], box[0]], [box[1], box[1], box[3], box[3], box[1]], linewidth=5,
                      alpha=score)
         label = int(viz_inputs['labels'][i])
-        letter = chr(label - 1 + ord('a'))
-        main_ax.text(x=int(box[0]), y=int(box[1]), s=f"{letter} {score:.1f}")
+        letter = chr(label - 1 + ord('a')).upper()
+        main_ax.text(x=int(box[0]), y=int(box[1]), s=f"{letter} {score:.1f}", size='large')
 
 
 def box_to_vertices(box):

@@ -64,33 +64,33 @@ UNDO_EXPIRED_EVENT = pygame.USEREVENT + 1
 
 
 def reset_card_dict():
-    card_dict = dict()
-    card_dict['A'] = 5
-    card_dict['B'] = 2
-    card_dict['C'] = 3
-    card_dict['D'] = 3
-    card_dict['E'] = 8
-    card_dict['F'] = 2
-    card_dict['G'] = 2
-    card_dict['H'] = 2
-    card_dict['I'] = 6
-    card_dict['J'] = 1
-    card_dict['K'] = 1
-    card_dict['L'] = 3
-    card_dict['M'] = 2
-    card_dict['N'] = 4
-    card_dict['O'] = 5
-    card_dict['P'] = 2
-    card_dict['R'] = 5
-    card_dict['S'] = 5
-    card_dict['T'] = 4
-    card_dict['U'] = 2
-    card_dict['V'] = 1
-    card_dict['W'] = 1
-    card_dict['X'] = 1
-    card_dict['Y'] = 1
-    card_dict['Z'] = 1
-    return card_dict
+    return {
+        'A': 5,
+        'B': 2,
+        'C': 3,
+        'D': 3,
+        'E': 8,
+        'F': 2,
+        'G': 2,
+        'H': 2,
+        'I': 6,
+        'J': 1,
+        'K': 1,
+        'L': 3,
+        'M': 2,
+        'N': 4,
+        'O': 5,
+        'P': 2,
+        'R': 5,
+        'S': 5,
+        'T': 4,
+        'U': 2,
+        'V': 1,
+        'W': 1,
+        'X': 1,
+        'Y': 1,
+        'Z': 1
+    }
 
 
 class Kiitos:
@@ -122,7 +122,6 @@ class Kiitos:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.state = GameState.GAME_OVER
-                    print("Thanks for playing Kiitos with Peter and Andrea's card counter!")
                 elif event.type == pygame.KEYDOWN:
                     key_pressed = event.unicode
                     if self.state == GameState.CORRECTING:
@@ -195,12 +194,12 @@ class Kiitos:
             self.undo_button.set_state(ButtonState.HIDING)
 
     def end_game(self):
+        self.ncd.cap_manager.stop()
         game_over_splash = True
         while game_over_splash:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     game_over_splash = False
-                    print("Thanks for playing Kiitos with Peter and Andrea's card counter!")
             self.draw_game_over()
 
     def draw_rectangles(self):
@@ -265,17 +264,6 @@ class Kiitos:
         self.round_over_popup.draw(self.screen)
 
         pygame.display.flip()
-
-    def draw_round_reset(self):
-        pass
-        # round_over_size = instruction_font.size(f'Round {self.round_count} over! Reset the playing area.')
-        # round_over_text = instruction_font.render(f'Round {self.round_count} over! Reset the playing area.', True, BLUE)
-        #
-        # countdown_size = instruction_font.size(f'Starting the next round in...{countdown - i}')
-        # countdown_text = instruction_font.render(f'Starting the next round in...{countdown - i}', True, BLUE)
-        # self.screen.blit(round_over_text, ((game_width - round_over_size[0]) // 2, game_height - top_padding + (top_padding // 2 - round_over_size[1]) // 2))
-        # self.screen.blit(countdown_text, ((game_width - countdown_size[0]) // 2, game_height - top_padding // 2 + (top_padding // 2 - countdown_size[1]) // 2))
-        # pygame.display.flip()
 
     def draw_game_over(self):
         self.screen.fill(GRAY)
