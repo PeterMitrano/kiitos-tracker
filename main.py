@@ -6,6 +6,8 @@ import time
 import numpy as np
 import pygame
 
+from game_logic import reset_card_dict
+
 pygame.init()
 
 from tracking_and_detection import NewCardDetector
@@ -61,36 +63,6 @@ notification_sound = pygame.mixer.Sound("notification.wav")
 notification_sound.set_volume(0.25)
 
 UNDO_EXPIRED_EVENT = pygame.USEREVENT + 1
-
-
-def reset_card_dict():
-    return {
-        'A': 5,
-        'B': 2,
-        'C': 3,
-        'D': 3,
-        'E': 8,
-        'F': 2,
-        'G': 2,
-        'H': 2,
-        'I': 6,
-        'J': 1,
-        'K': 1,
-        'L': 3,
-        'M': 2,
-        'N': 4,
-        'O': 5,
-        'P': 2,
-        'R': 5,
-        'S': 5,
-        'T': 4,
-        'U': 2,
-        'V': 1,
-        'W': 1,
-        'X': 1,
-        'Y': 1,
-        'Z': 1
-    }
 
 
 class Kiitos:

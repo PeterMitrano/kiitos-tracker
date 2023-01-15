@@ -5,7 +5,6 @@ import numpy as np
 
 import annotation
 from cnn_ocr import CNNOCR
-from ocr import GoogleOCR
 from video_capture import CaptureManager
 
 DISTANCE_THRESHOLD = 90
@@ -78,9 +77,12 @@ class NewCardDetector:
                 new_letter = card_tracker.letter
                 break
 
+        self.annotate_tracked_card_state(annotated_frame)
+
+        return new_letter, annotated_frame
+
+    def annotate_tracked_card_state(self, annotated_frame):
         for card_tracker in self.card_trackers:
             if card_tracker.confidence > CONFIDENCE_THRESHOLD:
                 text_pos = tuple([int(cord) for cord in card_tracker.position])
                 annotation.text(annotated_frame, card_tracker.letter, text_pos, 2, STATE_TEXT_COLOR, 4)
-
-        return new_letter, annotated_frame
