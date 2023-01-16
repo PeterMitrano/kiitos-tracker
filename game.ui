@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1328</width>
-    <height>620</height>
+    <width>1369</width>
+    <height>862</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -33,22 +33,7 @@
      </widget>
     </item>
     <item>
-     <layout class="QHBoxLayout" name="center_layout">
-      <item>
-       <widget class="QLabel" name="counts">
-        <property name="text">
-         <string/>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="img">
-        <property name="text">
-         <string/>
-        </property>
-       </widget>
-      </item>
-     </layout>
+     <layout class="QHBoxLayout" name="center_layout"/>
     </item>
     <item>
      <spacer name="spacer">
