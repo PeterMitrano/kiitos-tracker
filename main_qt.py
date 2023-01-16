@@ -1,16 +1,19 @@
 import enum
 import os
 import sys
+from time import sleep
 
 import numpy as np
 # noinspection PyUnresolvedReferences
 from PyQt5 import QtWidgets, uic
-from PyQt5.QtCore import QLibraryInfo, pyqtSignal, QRectF
+from PyQt5.QtCore import QLibraryInfo, pyqtSignal, QThread, QObject
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QTextOption, QFont
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen
 from PyQt5.QtWidgets import QLabel, QHBoxLayout
 
+from counts_widget import CountsWidget
 from game_logic import KiitosGame
+from tracking_and_detection import NewCardDetector
 
 # This is a problem caused by OpenCV
 # https://stackoverflow.com/questions/68417682/
@@ -18,6 +21,10 @@ os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(QLibraryInfo.P
 
 IMG_W = 640
 IMG_H = 480
+
+
+def array_to_qimg(annotated_image):
+    return QImage(annotated_image.data, IMG_W, IMG_H, 3 * IMG_W, QImage.Format.Format_RGB888)
 
 
 class HandleDirection(enum.Enum):
@@ -104,12 +111,10 @@ class ImageWidget(QLabel):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.annotated_image = np.ones([IMG_H, IMG_W, 3], dtype=np.uint8) * 128
-        self.update_pixmap()
+        self.update_pixmap(array_to_qimg(np.ones([IMG_H, IMG_W, 3], dtype=np.uint8) * 128))
         self.draggable_bbox = DraggableBbox(self)
 
-    def update_pixmap(self):
-        q_img = QImage(self.annotated_image.data, IMG_W, IMG_H, 3 * IMG_W, QImage.Format.Format_RGB888)
+    def update_pixmap(self, q_img: QImage):
         pixmap = QPixmap(q_img)
         # Calling setPixmap will trigger a paintEvent which ensures the box is drawn on top of the image
         self.setPixmap(pixmap)
@@ -145,68 +150,27 @@ class ImageWidget(QLabel):
         painter.end()
 
 
-class CountsWidget(QLabel):
-    CARD_FONT_SIZE = 28
+class CardDetectorWidget(QObject):
+    new_detection_str = pyqtSignal(str)
+    new_detection_img = pyqtSignal(QImage)
 
-    def __init__(self, parent, game):
-        super().__init__(parent)
+    def __init__(self, img_widget: ImageWidget, game: KiitosGame):
+        super().__init__()
         self.game = game
-        self.setFixedSize(650, 750)
+        self.img_widget = img_widget
+        self.ncd = NewCardDetector()
+        self.done = False
 
-    def paintEvent(self, event):
-        super().paintEvent(event)
-
-        painter = QPainter(self)
-        pen = QPen()
-        pen.setWidth(3)
-        blue = QColor("#262f4e")
-        pen.setColor(blue)
-        painter.setPen(pen)
-
-        frame_padding = 50
-        card_padding = 25
-        width = 75
-        height = 100
-        n_rows = 5
-        top_padding = 5
-        left_padding = 5
-        n_cols = 5
-        frame_width = frame_padding + n_cols * width + (n_cols + 1) * card_padding
-        frame_height = frame_padding + n_rows * height + (n_rows + 1) * card_padding
-        painter.drawRoundedRect(left_padding, top_padding, frame_width, frame_height, 40, 40)
-
-        # set the font size of the painter
-        font = QFont()
-        font.setPointSize(self.CARD_FONT_SIZE)
-        painter.setFont(font)
-
-        for row in range(n_rows):
-            for col in range(n_cols):
-                card_left = left_padding + frame_padding + col * width + col * card_padding
-                card_top = top_padding + frame_padding + row * height + row * card_padding
-                painter.drawRoundedRect(card_left, card_top, width, height, 20, 20)
-
-        text_option = QTextOption()
-        text_option.setAlignment(Qt.AlignCenter)
-        for letter in self.game.remaining_cards.keys():
-            row = (ord(letter) - 65) // n_cols if ord(letter) < ord('Q') else (ord(letter) - 65 - 1) // n_cols
-            col = (ord(letter) - 65) % n_rows if ord(letter) < ord('Q') else (ord(letter) - 65 - 1) % n_rows
-            card_left = left_padding + frame_padding + col * width + col * card_padding
-            card_top = top_padding + frame_padding + row * height + row * card_padding
-            card_rect = QRectF(card_left, card_top, width, height)
-            painter.drawText(card_rect, letter.upper(), option=text_option)
-            # letter_size = font.size(letter)
-            # value_size = font.size(str(self.remaining_cards[letter]))
-            # text_left = card_left + (width - letter_size[0]) // 2
-            # text_top = card_top + (height // 2 - letter_size[1]) // 2
-            # value_left = card_left + (width - value_size[0]) // 2
-            # value_top = card_top + height // 2 + (height // 2 - value_size[1]) // 2
-            # letter_img = font.render(letter, True, GRAY)
-            # value_img = font.render(str(self.remaining_cards[letter]), True, WHITE)
-            # self.screen.blit(letter_img, (text_left, text_top))
-            # self.screen.blit(value_img, (value_left, value_top))
-
-        painter.end()
+    def run(self):
+        while not self.done:
+            new_card, annotated_image = self.ncd.detect(self.img_widget.draggable_bbox.bbox)
+            q_img = array_to_qimg(annotated_image)
+            self.new_detection_img.emit(q_img)
+            if new_card is not None and self.game.is_valid_card(new_card):
+                # pygame.mixer.Sound.play(notification_sound)
+                # pygame.time.set_timer(UNDO_EXPIRED_EVENT, UNDO_EXPIRE_MILLIS, loops=1)
+                self.game.on_new_valid_card(new_card)
+        self.ncd.cap_manager.stop()
 
 
 class KiitosUi(QtWidgets.QMainWindow):
@@ -219,38 +183,24 @@ class KiitosUi(QtWidgets.QMainWindow):
 
         self.counts_widget = CountsWidget(self, self.game)
         self.img_widget = ImageWidget(self)
+        self.detector_widget = CardDetectorWidget(self.img_widget, self.game)
+        self.detector_widget.new_detection_img.connect(self.img_widget.update_pixmap)
         self.center_layout = self.findChild(QHBoxLayout, "center_layout")
         self.center_layout.addWidget(self.counts_widget)
         self.center_layout.addWidget(self.img_widget)
 
-        # self.ncd = NewCardDetector()
-
-        # self.camera_thread = QThread()
-        # self.camera_timer = QTimer()
-        # self.camera_timer.timeout.connect(self.update_camera)
-        # self.camera_timer.start(1000)  # this time is kinda arbitrary?
-        # TODO: we have two while-loops here which is unncessary
-        #  this thread and the camera manager are doing the same thing
-        # self.camera_timer.moveToThread(self.camera_thread)
-        # self.camera_thread.start()
-
-        # FIXME: if we want to override paintEvent for the img QLabel we need to subclass it
+        self.camera_thread = QThread()
+        self.detector_widget.moveToThread(self.camera_thread)
+        self.camera_thread.started.connect(self.detector_widget.run)
+        self.camera_thread.finished.connect(self.camera_thread.deleteLater)
+        self.camera_thread.start()
 
         self.show()
 
-    def update_camera(self):
-        # new_card, self.annotated_image = self.ncd.detect(self.bbox_widget.bbox)
-        # if new_card is not None and self.game.is_valid_card(new_card):
-        # pygame.mixer.Sound.play(notification_sound)
-        # pygame.time.set_timer(UNDO_EXPIRED_EVENT, UNDO_EXPIRE_MILLIS, loops=1)
-        # self.game.on_new_valid_card(new_card)
-
-        # self.img_widget.update_pixmap()
-        pass
-
     def closeEvent(self, event):
-        # self.ncd.cap_manager.stop()
-        pass
+        self.detector_widget.done = True
+        while self.camera_thread.wait(10):
+            pass
 
 
 if __name__ == '__main__':
