@@ -1,5 +1,6 @@
 import pathlib
 
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -8,7 +9,7 @@ from torchvision.models.detection import MaskRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 
-from ocr import filter_non_cards, annotate
+from ocr import filter_detections, annotate
 
 
 def label_to_letter(label):
@@ -100,6 +101,7 @@ def get_predictions(model, input_img):
     return real_prediction
 
 
+
 class CNNOCR:
 
     def __init__(self):
@@ -111,7 +113,7 @@ class CNNOCR:
 
         text_and_vertices = predictions_to_text_and_vertices(predictions)
 
-        letters, positions, valid_text_and_vertices = filter_non_cards(text_and_vertices, workspace_bbox)
+        letters, positions, valid_text_and_vertices = filter_detections(text_and_vertices, workspace_bbox)
         annotated = annotate(input_img, valid_text_and_vertices)
 
         return annotated, letters, positions

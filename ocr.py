@@ -1,8 +1,5 @@
-import re
-
 import cv2
 import numpy as np
-from google.cloud import vision
 
 import annotation
 
@@ -13,26 +10,18 @@ bbox_annotation_color = (0, 0, 255)
 baseline_annotation_color = (0, 255, 0)
 
 
-def fix_common_misdetections(text):
-    common_misdetections = {
-        '0': 'O',
-        '2': 'Z',
-    }
-    return common_misdetections.get(text, text)
-
-
 def in_bbox(vertices, bbox):
     for p in vertices:
-        if not (bbox[0, 0] < p[0] < bbox[1, 0] and bbox[0, 1] < p[1] < bbox[1, 1]):
+        if not (bbox.x0 < p[0] < bbox.x1 and bbox.y0 < p[1] < bbox.y1):
             return False
     return True
 
 
-def filter_non_cards(text_and_vertices, workspace_bbox):
+def filter_detections(text_and_vertices, workspace_bbox):
     letters = []
     positions = []
     valid_text_and_vertices = []
-    for text, vertices in text_and_vertices:
+    for letter, vertices in text_and_vertices:
         left_top = vertices[0]
         right_bottom = vertices[2]
         left_bottom = vertices[3]
@@ -46,21 +35,14 @@ def filter_non_cards(text_and_vertices, workspace_bbox):
         angle_in_img_frame = np.rad2deg(np.arctan2(slope_in_img_frame[1], slope_in_img_frame[0]))
         if abs(angle_in_img_frame) > MAX_BASELINE_ANGLE_DEG:
             continue
-        if len(text) != 1:
-            print('!!!!!', text)
-            continue
         if text_area < MAX_TEXT_AREA:
             continue
         if not in_bbox(vertices, workspace_bbox):
             continue
-        if not re.search(r'([a-z]|[A-Z])', text):
-            continue
-
-        letter = fix_common_misdetections(text)
 
         letters.append(letter)
         positions.append(position)
-        valid_text_and_vertices.append((text, vertices))
+        valid_text_and_vertices.append((letter, vertices))
 
     return letters, positions, valid_text_and_vertices
 
@@ -77,36 +59,3 @@ def annotate(input_img, text_and_vertices):
         annotation.text(annotated, letter, text_pos, 1, bbox_annotation_color, 3)
         annotated = cv2.line(annotated, left_bottom, right_bottom, baseline_annotation_color, 5)
     return annotated
-
-
-class GoogleOCR:
-
-    def __init__(self):
-        self.client = vision.ImageAnnotatorClient()
-
-    def detect(self, input_img, workspace_bbox):
-        adaptiveThresh = input_img.copy()
-
-        img_bytes = cv2.imencode('.jpg', adaptiveThresh)[1].tobytes()
-        image = vision.Image(content=img_bytes)
-
-        response = self.client.document_text_detection(image=image)
-        if response.error.message:
-            raise Exception(response.error.message)
-
-        document = response.full_text_annotation
-        text_and_vertices = []
-        for page in document.pages:
-            for block in page.blocks:
-                for paragraph in block.paragraphs:
-                    for word in paragraph.words:
-                        for symbol in word.symbols:
-                            if symbol.confidence < 0.4:
-                                continue
-                            vertices_np = np.array([[v.x, v.y] for v in symbol.bounding_box.vertices])
-                            text_and_vertices.append((symbol.text, vertices_np))
-
-        letters, positions, valid_text_and_vertices = filter_non_cards(text_and_vertices, workspace_bbox)
-        annotated = annotate(input_img, valid_text_and_vertices)
-
-        return annotated, letters, positions

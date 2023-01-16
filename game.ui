@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1369</width>
-    <height>862</height>
+    <width>756</width>
+    <height>152</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -47,22 +47,6 @@
        </size>
       </property>
      </spacer>
-    </item>
-    <item>
-     <widget class="QGroupBox" name="instructions_group">
-      <property name="title">
-       <string>Instructions:</string>
-      </property>
-      <layout class="QVBoxLayout" name="verticalLayout_3">
-       <item>
-        <widget class="QLabel" name="decrement_instruction">
-         <property name="text">
-          <string>Press any key to manually decrement the count</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
     </item>
    </layout>
   </widget>

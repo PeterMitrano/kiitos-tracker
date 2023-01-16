@@ -1,281 +1,231 @@
-import argparse
 import enum
-import random
-import time
+import os
+import sys
+from dataclasses import dataclass
 
 import numpy as np
-import pygame
+# noinspection PyUnresolvedReferences
+from PyQt5 import QtWidgets, uic
+from PyQt5.QtCore import QLibraryInfo, pyqtSignal, QThread, QObject, QUrl
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen
+from PyQt5.QtMultimedia import QSoundEffect
+from PyQt5.QtWidgets import QLabel, QHBoxLayout, QSizePolicy
 
-from game_logic import reset_card_dict
-
-pygame.init()
-
+from counts_widget import CountsWidget
+from game_logic import KiitosGame
 from tracking_and_detection import NewCardDetector
-from ui import ButtonState, instruction_font, card_font, WHITE, GRAY, BLACK, BLUE, instructions_font_size, Button, \
-    PopUp, PopUpState, Align, RED, workspace_instruction_font, ConfirmPopUp
 
-UNDO_EXPIRE_MILLIS = 3000
+# This is a problem caused by OpenCV
+# https://stackoverflow.com/questions/68417682/
+os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(QLibraryInfo.PluginsPath)
 
-ESCAPE = '\x1b'
-
-
-class GameState(enum.Enum):
-    PLAYING = enum.auto()
-    MANUAL_LETTER = enum.auto()
-    CORRECTING = enum.auto()
-    GAME_OVER = enum.auto()
-    ROUND_OVER = enum.auto()
+IMG_W = 640
+IMG_H = 480
 
 
-workspace_bbox_color = (205, 25, 25)
-workspace_bbox = np.array([
-    [40, 100],
-    [610, 400],
-])
-
-headline_font_size = 80
-img_w = 640
-img_h = 480
-img_padding = 10
-game_width = 625 + img_w + img_padding * 2
-img_x0 = game_width - 2 * img_padding - img_w
-img_y0 = img_padding + headline_font_size
-game_height = 900
-top_padding = 100
-bottom_padding = 10
-left_padding = 25
-n_rows = 5
-n_cols = 5
-frame_padding = 50
-card_padding = 25
-width = 75
-height = 100
-countdown = 3
-approx_undo_text_w = 300  # approx because the undo string is variable length
-background = pygame.image.load('img/background.jpg')
-background = pygame.transform.scale(background, (game_width + 500, game_height + 500))
-headline_font = pygame.font.SysFont(None, headline_font_size)
-undo_y = game_height - bottom_padding - instructions_font_size
-undo_popup_str = "Press the letter you played, or ESCAPE if no card was played"
-round_over_popup_str = "Round over! Reset the playing area"
-
-notification_sound = pygame.mixer.Sound("notification.wav")
-notification_sound.set_volume(0.25)
-
-UNDO_EXPIRED_EVENT = pygame.USEREVENT + 1
+def array_to_qimg(annotated_image):
+    return QImage(annotated_image.data, IMG_W, IMG_H, 3 * IMG_W, QImage.Format.Format_RGB888)
 
 
-class Kiitos:
+class HandleDirection(enum.Enum):
+    VERTICAL = enum.auto()
+    HORIZONTAL = enum.auto()
 
-    def __init__(self, debug_vision):
-        self.debug_vision = debug_vision
-        self.screen = pygame.display.set_mode([game_width, game_height])
-        self.remaining_cards = reset_card_dict()
-        self.state = GameState.PLAYING
-        self.round_count = 1
-        self.annotated_image = np.ones([img_h, img_w, 3]) * 128
-        self.ncd = None
-        self.latest_letter = None
-        if self.debug_vision:
-            self.ncd = NewCardDetector()
 
-        self.undo_popup = PopUp(undo_popup_str, game_width / 2, game_height / 2, Align.MIDDLE, Align.MIDDLE)
+class BBoxHandle(QLabel):
+    SIZE = 25
+    HALF_SIZE = int(SIZE / 2)
+    V_ICON_PATH = "icons/vertical_handle.png"
+    H_ICON_PATH = "icons/horizontal_handle.png"
+    position = pyqtSignal(int)
 
-        self.round_over_popup = ConfirmPopUp(round_over_popup_str, game_width / 2, game_height / 2,
-                                             Align.MIDDLE, Align.MIDDLE)
+    def __init__(self, parent, direction: HandleDirection):
+        super().__init__(parent)
+        self.direction = direction
+        self.resize(BBoxHandle.SIZE, BBoxHandle.SIZE)
+        self.offset = None
+        self.icon = self.V_ICON_PATH if self.direction == HandleDirection.VERTICAL else self.H_ICON_PATH
+        icon = QPixmap(self.icon)
+        # resize icon to fit the label
+        self.setPixmap(icon.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
-        undo_x = left_padding + approx_undo_text_w
-        self.undo_button = Button("undo", undo_x, undo_y)
-        self.undo_button.set_state(ButtonState.HIDING)
+    def mousePressEvent(self, event):
+        self.offset = event.pos()
+
+    def mouseMoveEvent(self, event):
+        dest = self.mapToParent(event.pos() - self.offset)
+        position = dest.y() if self.direction == HandleDirection.VERTICAL else dest.x()
+        self.position.emit(position)
+
+
+@dataclass
+class BBox:
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+
+
+class DraggableBbox:
+    """ A non-widget class to help coordinate the 4 draggable handles"""
+
+    def __init__(self, parent):
+        self.parent = parent
+        self.bbox = BBox(x0=20, y0=20, x1=620, y1=200)
+
+        self.left = BBoxHandle(parent, HandleDirection.HORIZONTAL)
+        self.left.position.connect(self.on_left_position_changed)
+        self.top = BBoxHandle(parent, HandleDirection.VERTICAL)
+        self.top.position.connect(self.on_top_position_changed)
+        self.right = BBoxHandle(parent, HandleDirection.HORIZONTAL)
+        self.right.position.connect(self.on_right_position_changed)
+        self.bottom = BBoxHandle(parent, HandleDirection.VERTICAL)
+        self.bottom.position.connect(self.on_bottom_position_changed)
+
+        self.on_left_position_changed(self.bbox.x0)
+        self.on_top_position_changed(self.bbox.y0)
+        self.on_right_position_changed(self.bbox.x1)
+        self.on_bottom_position_changed(self.bbox.y1)
+
+    def on_left_position_changed(self, position):
+        self.bbox.x0 = position
+        self.parent.update()
+
+    def on_top_position_changed(self, position):
+        self.bbox.y0 = position
+        self.parent.update()
+
+    def on_right_position_changed(self, position):
+        self.bbox.x1 = position
+        self.parent.update()
+
+    def on_bottom_position_changed(self, position):
+        self.bbox.y1 = position
+        self.parent.update()
+
+    def get_rect_params(self):
+        w = self.bbox.x1 - self.bbox.x0
+        h = self.bbox.y1 - self.bbox.y0
+        x0 = self.bbox.x0
+        y0 = self.bbox.y0
+
+        return x0, y0, w, h
+
+
+class ImageWidget(QLabel):
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.update_pixmap(array_to_qimg(np.ones([IMG_H, IMG_W, 3], dtype=np.uint8) * 128))
+        self.draggable_bbox = DraggableBbox(self)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.resize(IMG_H, IMG_W)
+        self.setStyleSheet("border: 1px solid black;")
+
+    def update_pixmap(self, q_img: QImage):
+        pixmap = QPixmap(q_img)
+        # Calling setPixmap will trigger a paintEvent which ensures the box is drawn on top of the image
+        self.setPixmap(pixmap)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+
+        painter = QPainter(self)
+        pen = QPen()
+        pen.setWidth(3)
+        pen.setColor(Qt.red)
+        painter.setPen(pen)
+
+        x0, y0, w, h = self.draggable_bbox.get_rect_params()
+
+        # clip based on the size of the image
+        # the order of these updates is important because we're overwriting values
+        x1 = min(max(x0 + w, 0), self.width())
+        y1 = min(max(y0 + h, 0), self.height())
+        x0 = min(max(x0, 0), self.width())
+        y0 = min(max(y0, 0), self.height())
+        h = y1 - y0
+        w = x1 - x0
+
+        center_x = int(x0 + w / 2)
+        center_y = int(y0 + h / 2)
+        self.draggable_bbox.left.move(x0 - BBoxHandle.HALF_SIZE, center_y - BBoxHandle.HALF_SIZE)
+        self.draggable_bbox.top.move(center_x - BBoxHandle.HALF_SIZE, y0 - BBoxHandle.HALF_SIZE)
+        self.draggable_bbox.right.move(x1 - BBoxHandle.HALF_SIZE, center_y - BBoxHandle.HALF_SIZE)
+        self.draggable_bbox.bottom.move(center_x - BBoxHandle.HALF_SIZE, y1 - BBoxHandle.HALF_SIZE)
+
+        painter.drawRect(x0, y0, w, h)
+        painter.end()
+
+
+class CardDetectorWidget(QObject):
+    new_detection_str = pyqtSignal(str)
+    new_detection_img = pyqtSignal(QImage)
+
+    def __init__(self, img_widget: ImageWidget, game: KiitosGame):
+        super().__init__()
+        self.game = game
+        self.img_widget = img_widget
+        self.ncd = NewCardDetector()
+        self.done = False
+
+        self.effect = QSoundEffect()
+        self.effect.setSource(QUrl.fromLocalFile("notification.wav"))
+        self.effect.setVolume(0.25)
 
     def run(self):
-        while self.state != GameState.GAME_OVER:
-            manual_letter = None
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.state = GameState.GAME_OVER
-                elif event.type == pygame.KEYDOWN:
-                    key_pressed = event.unicode
-                    if self.state == GameState.CORRECTING:
-                        if key_pressed == ESCAPE:
-                            self.undo_last_decrement()
-                            self.state = GameState.PLAYING
-                            self.undo_popup.set_state(PopUpState.HIDING)
-                        elif key_pressed.upper() in self.remaining_cards:
-                            self.undo_last_decrement()
-                            self.undo_popup.set_state(PopUpState.HIDING)
-                            self.state = GameState.MANUAL_LETTER
-                            manual_letter = key_pressed.upper()
-                    elif self.state == GameState.PLAYING:
-                        self.state = GameState.MANUAL_LETTER
-                        manual_letter = key_pressed.upper()
-                elif event.type == UNDO_EXPIRED_EVENT:
-                    self.undo_button.set_state(ButtonState.WAITING)
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if self.undo_button.pressed():
-                        self.state = GameState.CORRECTING
-                    if self.round_over_popup.pressed():
-                        self.round_count += 1
-                        self.remaining_cards = reset_card_dict()
-                        self.state = GameState.PLAYING
-
-            self.handle_state(manual_letter)
-
-            time.sleep(0.1)
-
-        self.end_game()
-
-    def handle_state(self, manual_letter):
-        if self.state == GameState.PLAYING:
-            if self.debug_vision:
-                new_card, self.annotated_image = self.ncd.detect(workspace_bbox)
-                if new_card is not None:
-                    if new_card in self.remaining_cards:
-                        self.on_new_valid_card(new_card, print_card=True)
-                else:
-                    print(f"bad detection! {new_card}")
-            else:
-                choice_var = random.randint(0, 99)
-                if choice_var > 1:
-                    random_letter = chr(random.randint(65, 90))
-                    while random_letter == 'Q' or self.remaining_cards[random_letter] == 0:
-                        random_letter = chr(random.randint(65, 90))
-                    self.on_new_valid_card(random_letter)
-            round_over = np.sum(np.asarray(list(self.remaining_cards.values()))) <= 0
-            if round_over:
-                if self.round_count < 3:
-                    self.state = GameState.ROUND_OVER
-                    self.round_over_popup.set_state(PopUpState.SHOWING)
-                else:
-                    self.state = GameState.GAME_OVER
-
-        elif self.state == GameState.MANUAL_LETTER:
-            if manual_letter in self.remaining_cards:
-                self.on_new_valid_card(manual_letter)
-            self.state = GameState.PLAYING
-        elif self.state == GameState.CORRECTING:
-            self.undo_popup.set_state(PopUpState.SHOWING)
-        elif self.state == GameState.ROUND_OVER:
-            pass
-        elif self.state == GameState.GAME_OVER:
-            pass
-
-        self.draw_board()
-
-        if self.undo_button.state == ButtonState.WAITING and self.state == GameState.PLAYING:
-            self.undo_button.set_state(ButtonState.HIDING)
-
-    def end_game(self):
+        while not self.done:
+            new_card, annotated_image = self.ncd.detect(self.img_widget.draggable_bbox.bbox)
+            q_img = array_to_qimg(annotated_image)
+            self.new_detection_img.emit(q_img)
+            if new_card is not None and self.game.is_valid_card(new_card):
+                self.effect.play()
+                # pygame.time.set_timer(UNDO_EXPIRED_EVENT, UNDO_EXPIRE_MILLIS, loops=1)
+                self.new_detection_str.emit(new_card)
         self.ncd.cap_manager.stop()
-        game_over_splash = True
-        while game_over_splash:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    game_over_splash = False
-            self.draw_game_over()
-
-    def draw_rectangles(self):
-        frame_width = frame_padding + n_cols * width + (n_cols + 1) * card_padding
-        frame_height = frame_padding + n_rows * height + (n_rows + 1) * card_padding
-        card_frame = pygame.Rect(left_padding, top_padding, frame_width, frame_height)
-        pygame.draw.rect(self.screen, BLUE, card_frame, width=20, border_radius=40)
-        for row in range(n_rows):
-            for col in range(n_cols):
-                card_left = left_padding + frame_padding + col * width + col * card_padding
-                card_top = top_padding + frame_padding + row * height + row * card_padding
-                card_rect = pygame.Rect(card_left, card_top, width, height)
-                pygame.draw.rect(self.screen, BLUE, card_rect, border_radius=20)
-
-    def draw_cards(self, font):
-        for letter in list(self.remaining_cards.keys()):
-            letter_size = font.size(letter)
-            value_size = font.size(str(self.remaining_cards[letter]))
-            row = (ord(letter) - 65) // n_cols if ord(letter) < ord('Q') else (ord(letter) - 65 - 1) // n_cols
-            col = (ord(letter) - 65) % n_rows if ord(letter) < ord('Q') else (ord(letter) - 65 - 1) % n_rows
-            card_left = left_padding + frame_padding + col * width + col * card_padding
-            card_top = top_padding + frame_padding + row * height + row * card_padding
-            text_left = card_left + (width - letter_size[0]) // 2
-            text_top = card_top + (height // 2 - letter_size[1]) // 2
-            value_left = card_left + (width - value_size[0]) // 2
-            value_top = card_top + height // 2 + (height // 2 - value_size[1]) // 2
-            letter_img = font.render(letter, True, GRAY)
-            value_img = font.render(str(self.remaining_cards[letter]), True, WHITE)
-            self.screen.blit(letter_img, (text_left, text_top))
-            self.screen.blit(value_img, (value_left, value_top))
-
-    def draw_board(self):
-        self.screen.fill(WHITE)
-        self.screen.blit(background, (0, 0))
-        annotated_image_t = self.annotated_image.transpose([1, 0, 2])
-        annotated_image_surf = pygame.surfarray.make_surface(annotated_image_t)
-        self.screen.blit(annotated_image_surf, (img_x0, img_y0))
-        self.draw_rectangles()
-        headline_size = headline_font.size(f'Kiitos: Round {self.round_count}')
-        headline = headline_font.render(f'Kiitos: Round {self.round_count}', True, BLUE)
-        self.screen.blit(headline, ((game_width - headline_size[0]) // 2, (top_padding - headline_size[1]) // 2))
-        self.draw_cards(card_font)
-        workspace_w = workspace_bbox[1, 0] - workspace_bbox[0, 0]
-        workspace_h = workspace_bbox[1, 1] - workspace_bbox[0, 1]
-        workspace_x0 = img_x0 + workspace_bbox[0, 0]
-        workspace_y0 = img_y0 + workspace_bbox[0, 1]
-        workspace_y1 = workspace_y0 + workspace_h
-        workspace_rect = pygame.Rect(workspace_x0, workspace_y0, workspace_w, workspace_h)
-        workspace_instructions = workspace_instruction_font.render('Keep cards inside', True, RED)
-        self.screen.blit(workspace_instructions, (workspace_x0, workspace_y1))
-        pygame.draw.rect(self.screen, workspace_bbox_color, workspace_rect, width=2)
-
-        manual_instructions = instruction_font.render('Press any key to manually decrement the count', True, BLACK)
-        self.screen.blit(manual_instructions, (left_padding, game_height - bottom_padding - 2 * instructions_font_size))
-
-        if self.undo_button.state != ButtonState.HIDING:
-            undo_instructions = instruction_font.render(f'You played {self.latest_letter}', True, BLACK)
-            self.screen.blit(undo_instructions, (left_padding, undo_y))
-
-        self.undo_popup.draw(self.screen)
-        self.undo_button.draw(self.screen)
-        self.round_over_popup.draw(self.screen)
-
-        pygame.display.flip()
-
-    def draw_game_over(self):
-        self.screen.fill(GRAY)
-        self.screen.blit(background, (0, 0))
-        text_size = headline_font.size('Game Over!')
-        text = headline_font.render('Game Over!', True, WHITE)
-        text_padding = 40
-        text_background = pygame.Rect(game_width // 2 - (text_size[0] + text_padding) // 2,
-                                      game_height // 2 - (text_size[1] + text_padding) // 2,
-                                      text_size[0] + text_padding,
-                                      text_size[1] + text_padding)
-        pygame.draw.rect(self.screen, BLUE, text_background, border_radius=40)
-        self.screen.blit(text, (game_width // 2 - (text_size[0]) // 2, game_height // 2 - (text_size[1]) // 2))
-        pygame.display.flip()
-
-    def undo_last_decrement(self):
-        self.remaining_cards[self.latest_letter] += 1
-
-    def on_new_valid_card(self, new_card, print_card=False):
-        self.latest_letter = new_card
-        pygame.mixer.Sound.play(notification_sound)
-
-        self.undo_button.set_state(ButtonState.SHOWING)
-        pygame.time.set_timer(UNDO_EXPIRED_EVENT, UNDO_EXPIRE_MILLIS, loops=1)
-
-        if print_card:
-            print(f'new card! {new_card}')
-        if self.remaining_cards[new_card] > 0:
-            self.remaining_cards[new_card] -= 1
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--debug-vision', action='store_true')
+class KiitosUi(QtWidgets.QMainWindow):
 
-    args = parser.parse_args()
+    def __init__(self):
+        super(KiitosUi, self).__init__()
+        uic.loadUi('game.ui', self)
 
-    k = Kiitos(args.debug_vision)
-    k.run()
+        self.game = KiitosGame()
+
+        margin = 10
+        self.setContentsMargins(margin, margin, margin, margin)
+
+        self.counts_widget = CountsWidget(self, self.game)
+        self.img_widget = ImageWidget(self)
+        self.detector_widget = CardDetectorWidget(self.img_widget, self.game)
+        self.detector_widget.new_detection_img.connect(self.img_widget.update_pixmap)
+        self.detector_widget.new_detection_str.connect(self.game.on_new_valid_card)
+        self.detector_widget.new_detection_str.connect(self.new_detection)
+        self.center_layout = self.findChild(QHBoxLayout, "center_layout")
+        self.center_layout.setAlignment(Qt.AlignTop)
+        self.center_layout.addWidget(self.counts_widget)
+        self.center_layout.addWidget(self.img_widget)
+
+        self.camera_thread = QThread()
+        self.detector_widget.moveToThread(self.camera_thread)
+        self.camera_thread.started.connect(self.detector_widget.run)
+        self.camera_thread.finished.connect(self.camera_thread.deleteLater)
+        self.camera_thread.start()
+
+        self.show()
+
+    def new_detection(self):
+        self.counts_widget.update()
+
+    def closeEvent(self, event):
+        self.detector_widget.done = True
+        while self.camera_thread.wait(10):
+            pass
 
 
 if __name__ == '__main__':
-    main()
+    app = QtWidgets.QApplication(sys.argv)
+    window = KiitosUi()
+    app.exec()

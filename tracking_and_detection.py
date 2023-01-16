@@ -7,13 +7,14 @@ import annotation
 from cnn_ocr import CNNOCR
 from video_capture import CaptureManager
 
-DISTANCE_THRESHOLD = 90
+DISTANCE_THRESHOLD = 50
 
 STATE_TEXT_COLOR = (220, 20, 220)
 CONFIDENCE_THRESHOLD = 0.9
+MIN_CONFIDENCE_THRESHOLD = 0.5
 
-confidence_inc = 0.25
-confidence_dec = confidence_inc / 6
+confidence_inc = 0.4
+confidence_dec = confidence_inc / 5
 motion_alpha = 0.5
 
 
@@ -63,9 +64,10 @@ class NewCardDetector:
 
         to_remove = []
         for card_tracker in self.card_trackers:
-            card_tracker.confidence -= confidence_dec
-            if card_tracker.confidence <= 0:
+            confidence_post_dec = card_tracker.confidence - confidence_dec
+            if card_tracker.confidence > MIN_CONFIDENCE_THRESHOLD and confidence_post_dec < MIN_CONFIDENCE_THRESHOLD:
                 to_remove.append(card_tracker)
+            card_tracker.confidence = confidence_post_dec
 
         for to_remove_i in to_remove:
             self.card_trackers.remove(to_remove_i)
@@ -83,6 +85,6 @@ class NewCardDetector:
 
     def annotate_tracked_card_state(self, annotated_frame):
         for card_tracker in self.card_trackers:
-            if card_tracker.confidence > CONFIDENCE_THRESHOLD:
+            if card_tracker.confidence > MIN_CONFIDENCE_THRESHOLD and card_tracker.reported:
                 text_pos = tuple([int(cord) for cord in card_tracker.position])
                 annotation.text(annotated_frame, card_tracker.letter, text_pos, 2, STATE_TEXT_COLOR, 4)
