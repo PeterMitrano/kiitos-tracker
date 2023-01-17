@@ -1,15 +1,16 @@
 import pathlib
 
-import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torchvision
+from detectron2.model_zoo import model_zoo
 from torchvision.models.detection import MaskRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 
 from ocr import filter_detections, annotate
+from utils.general import non_max_suppression
 
 
 def label_to_letter(label):
@@ -90,7 +91,13 @@ def box_to_vertices(box):
     return vertices
 
 
-def get_predictions(model, input_img):
+def get_predictions_detectron(model, input_img):
+    with torch.no_grad():
+        prediction = model(input_img)
+    return prediction
+
+
+def get_predictions_maskrcnn(model, input_img):
     real_test_img_np = np.transpose(input_img, [2, 0, 1])
     real_img_tensor = torch.tensor(real_test_img_np).float()
     real_img_tensor = real_img_tensor / real_img_tensor.max()
@@ -101,22 +108,24 @@ def get_predictions(model, input_img):
     return real_prediction
 
 
-
-class CNNOCR:
-
-    def __init__(self):
-        model_path = pathlib.Path("model-6.pt")
-        self.model = load_model(model_path)
-
-    def detect(self, input_img, workspace_bbox):
-        predictions = get_predictions(self.model, input_img)
-
-        text_and_vertices = predictions_to_text_and_vertices(predictions)
-
-        letters, positions, valid_text_and_vertices = filter_detections(text_and_vertices, workspace_bbox)
-        annotated = annotate(input_img, valid_text_and_vertices)
-
-        return annotated, letters, positions
+def get_predictions_yolo(model, input_img):
+    test_img_np = np.transpose(input_img, [2, 0, 1])
+    img_tensor = torch.tensor(test_img_np).float()
+    img_tensor /= 255.0
+    img_tensor = img_tensor.unsqueeze(0)
+    with torch.no_grad():
+        prediction = model(img_tensor)
+    predictions = prediction[0]
+    predictions = non_max_suppression(predictions, conf_thres=0.5)
+    prediction = predictions[0]
+    boxes = prediction[:, :4]
+    scores = prediction[:, 4].numpy()
+    labels = prediction[:, 5].numpy().astype(int) + 1
+    return {
+        'boxes': boxes,
+        'scores': scores,
+        'labels': labels,
+    }
 
 
 def predictions_to_text_and_vertices(real_prediction):
@@ -126,3 +135,53 @@ def predictions_to_text_and_vertices(real_prediction):
         vertices = box_to_vertices(box.numpy().squeeze().astype(int))
         text_and_vertices.append((letter, vertices))
     return text_and_vertices
+
+
+def load_detectron2():
+    from detectron2.utils.logger import setup_logger
+    setup_logger()
+
+    from detectron2.engine import DefaultPredictor
+    from detectron2.config import get_cfg
+
+    cfg = get_cfg()
+    cfg.MODEL.DEVICE = 'cpu'
+    cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 26
+    cfg.MODEL.WEIGHTS = "model_final.pth"
+    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # set a custom testing threshold
+    predictor = DefaultPredictor(cfg)
+    return predictor
+
+
+def load_yolov7():
+    import torch
+    model = torch.load('best.pt', map_location='cpu')
+    model = model['model'].to(dtype=torch.float32)
+    model.eval()
+    return model
+
+
+def load_maskrcnn():
+    model_path = pathlib.Path("model-6.pt")
+    model = load_model(model_path)
+    return model
+
+
+class CNNOCR:
+
+    def __init__(self):
+        # model_path = pathlib.Path("model-6.pt")
+        # self.model = load_model(model_path)
+        self.model = load_yolov7()
+
+    def detect(self, input_img, workspace_bbox):
+        # predictions = get_predictions_maskrcnn(self.model, input_img)
+        predictions = get_predictions_yolo(self.model, input_img)
+
+        text_and_vertices = predictions_to_text_and_vertices(predictions)
+
+        letters, positions, valid_text_and_vertices = filter_detections(text_and_vertices, workspace_bbox)
+        annotated = annotate(input_img, valid_text_and_vertices)
+
+        return annotated, letters, positions

@@ -72,7 +72,7 @@ class DraggableBbox:
 
     def __init__(self, parent):
         self.parent = parent
-        self.bbox = BBox(x0=20, y0=20, x1=620, y1=200)
+        self.bbox = BBox(x0=2, y0=2, x1=636, y1=200)
 
         self.left = BBoxHandle(parent, HandleDirection.HORIZONTAL)
         self.left.position.connect(self.on_left_position_changed)
