@@ -23,6 +23,7 @@ class BBoxHandle(QLabel):
         self.direction = direction
         self.resize(BBoxHandle.SIZE, BBoxHandle.SIZE)
         self.offset = None
+        self.setStyleSheet("border: none;")
         self.icon = self.V_ICON_PATH if self.direction == HandleDirection.VERTICAL else self.H_ICON_PATH
         icon = QPixmap(self.icon)
         # resize icon to fit the label

@@ -63,13 +63,25 @@
     <property name="title">
      <string>Tools</string>
     </property>
-    <addaction name="action_capture"/>
+    <addaction name="capture_action"/>
    </widget>
+   <widget class="QMenu" name="menuGame">
+    <property name="title">
+     <string>Game</string>
+    </property>
+    <addaction name="reset_action"/>
+   </widget>
+   <addaction name="menuGame"/>
    <addaction name="menuTools"/>
   </widget>
-  <action name="action_capture">
+  <action name="capture_action">
    <property name="text">
     <string>Capture Image for Training</string>
+   </property>
+  </action>
+  <action name="reset_action">
+   <property name="text">
+    <string>Reset</string>
    </property>
   </action>
  </widget>

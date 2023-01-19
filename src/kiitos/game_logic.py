@@ -1,3 +1,6 @@
+from PyQt5.QtCore import pyqtSignal, QObject
+
+
 def reset_card_dict():
     return {
         'A': 5,
@@ -24,13 +27,15 @@ def reset_card_dict():
         'W': 1,
         'X': 1,
         'Y': 1,
-        'Z': 1
+        'Z': 1,
     }
 
 
-class KiitosGame:
+class KiitosGame(QObject):
+    next_round = pyqtSignal()
 
     def __init__(self):
+        super().__init__()
         self.latest_letter = None
         self.remaining_cards = reset_card_dict()
 
@@ -44,3 +49,9 @@ class KiitosGame:
 
         if self.remaining_cards[new_card] > 0:
             self.remaining_cards[new_card] -= 1
+
+        if sum(self.remaining_cards.values()) == 0:
+            self.next_round.emit()
+
+    def reset(self):
+        self.remaining_cards = reset_card_dict()

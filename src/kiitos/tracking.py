@@ -62,12 +62,13 @@ class NewCardDetector:
                 card_tracker.position = motion_alpha * card_tracker.position + (1 - motion_alpha) * position
                 card_tracker.confidence = min(1, card_tracker.confidence + confidence_inc)
 
+        for card_tracker in self.card_trackers:
+            card_tracker.confidence -= confidence_dec
+
         to_remove = []
         for card_tracker in self.card_trackers:
-            confidence_post_dec = card_tracker.confidence - confidence_dec
-            if card_tracker.confidence > MIN_CONFIDENCE_THRESHOLD and confidence_post_dec < MIN_CONFIDENCE_THRESHOLD:
+            if card_tracker.confidence < 0 or card_tracker.confidence < MIN_CONFIDENCE_THRESHOLD and card_tracker.reported:
                 to_remove.append(card_tracker)
-            card_tracker.confidence = confidence_post_dec
 
         for to_remove_i in to_remove:
             self.card_trackers.remove(to_remove_i)
