@@ -63,11 +63,11 @@
     <property name="title">
      <string>Tools</string>
     </property>
-    <addaction name="capture_action"/>
+    <addaction name="action_capture"/>
    </widget>
    <addaction name="menuTools"/>
   </widget>
-  <action name="capture_action">
+  <action name="action_capture">
    <property name="text">
     <string>Capture Image for Training</string>
    </property>

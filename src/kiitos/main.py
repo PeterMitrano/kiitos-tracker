@@ -1,20 +1,20 @@
-import enum
 import os
 import sys
-from dataclasses import dataclass
+from datetime import datetime
 
-import numpy as np
+from PIL import Image
 # noinspection PyUnresolvedReferences
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtCore import QLibraryInfo, pyqtSignal, QThread, QObject, QUrl
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen
 from PyQt5.QtMultimedia import QSoundEffect
-from PyQt5.QtWidgets import QLabel, QHBoxLayout, QSizePolicy
+from PyQt5.QtWidgets import QLabel, QSizePolicy
 
 from counts_widget import CountsWidget
+from draggable_bbox import BBoxHandle, DraggableBbox
 from game_logic import KiitosGame
-from tracking_and_detection import NewCardDetector
+from tracking import NewCardDetector
 
 # This is a problem caused by OpenCV
 # https://stackoverflow.com/questions/68417682/
@@ -28,96 +28,13 @@ def array_to_qimg(annotated_image):
     return QImage(annotated_image.data, IMG_W, IMG_H, 3 * IMG_W, QImage.Format.Format_RGB888)
 
 
-class HandleDirection(enum.Enum):
-    VERTICAL = enum.auto()
-    HORIZONTAL = enum.auto()
-
-
-class BBoxHandle(QLabel):
-    SIZE = 25
-    HALF_SIZE = int(SIZE / 2)
-    V_ICON_PATH = "icons/vertical_handle.png"
-    H_ICON_PATH = "icons/horizontal_handle.png"
-    position = pyqtSignal(int)
-
-    def __init__(self, parent, direction: HandleDirection):
-        super().__init__(parent)
-        self.direction = direction
-        self.resize(BBoxHandle.SIZE, BBoxHandle.SIZE)
-        self.offset = None
-        self.icon = self.V_ICON_PATH if self.direction == HandleDirection.VERTICAL else self.H_ICON_PATH
-        icon = QPixmap(self.icon)
-        # resize icon to fit the label
-        self.setPixmap(icon.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-
-    def mousePressEvent(self, event):
-        self.offset = event.pos()
-
-    def mouseMoveEvent(self, event):
-        dest = self.mapToParent(event.pos() - self.offset)
-        position = dest.y() if self.direction == HandleDirection.VERTICAL else dest.x()
-        self.position.emit(position)
-
-
-@dataclass
-class BBox:
-    x0: float
-    y0: float
-    x1: float
-    y1: float
-
-
-class DraggableBbox:
-    """ A non-widget class to help coordinate the 4 draggable handles"""
-
-    def __init__(self, parent):
-        self.parent = parent
-        self.bbox = BBox(x0=2, y0=2, x1=636, y1=200)
-
-        self.left = BBoxHandle(parent, HandleDirection.HORIZONTAL)
-        self.left.position.connect(self.on_left_position_changed)
-        self.top = BBoxHandle(parent, HandleDirection.VERTICAL)
-        self.top.position.connect(self.on_top_position_changed)
-        self.right = BBoxHandle(parent, HandleDirection.HORIZONTAL)
-        self.right.position.connect(self.on_right_position_changed)
-        self.bottom = BBoxHandle(parent, HandleDirection.VERTICAL)
-        self.bottom.position.connect(self.on_bottom_position_changed)
-
-        self.on_left_position_changed(self.bbox.x0)
-        self.on_top_position_changed(self.bbox.y0)
-        self.on_right_position_changed(self.bbox.x1)
-        self.on_bottom_position_changed(self.bbox.y1)
-
-    def on_left_position_changed(self, position):
-        self.bbox.x0 = position
-        self.parent.update()
-
-    def on_top_position_changed(self, position):
-        self.bbox.y0 = position
-        self.parent.update()
-
-    def on_right_position_changed(self, position):
-        self.bbox.x1 = position
-        self.parent.update()
-
-    def on_bottom_position_changed(self, position):
-        self.bbox.y1 = position
-        self.parent.update()
-
-    def get_rect_params(self):
-        w = self.bbox.x1 - self.bbox.x0
-        h = self.bbox.y1 - self.bbox.y0
-        x0 = self.bbox.x0
-        y0 = self.bbox.y0
-
-        return x0, y0, w, h
-
-
 class ImageWidget(QLabel):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.update_pixmap(array_to_qimg(np.ones([IMG_H, IMG_W, 3], dtype=np.uint8) * 128))
+        init_pixmap = QPixmap(IMG_W, IMG_H)
+        init_pixmap.fill(Qt.gray)
+        self.setPixmap(init_pixmap)
         self.draggable_bbox = DraggableBbox(self)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.resize(IMG_H, IMG_W)
@@ -190,20 +107,21 @@ class KiitosUi(QtWidgets.QMainWindow):
 
     def __init__(self):
         super(KiitosUi, self).__init__()
-        uic.loadUi('game.ui', self)
+        uic.loadUi('src/kiitos/game.ui', self)
 
         self.game = KiitosGame()
 
         margin = 10
         self.setContentsMargins(margin, margin, margin, margin)
 
+        self.action_capture.triggered.connect(self.save_last_frame)
+        self.action_capture.setShortcut("Ctrl+S")
         self.counts_widget = CountsWidget(self, self.game)
         self.img_widget = ImageWidget(self)
         self.detector_widget = CardDetectorWidget(self.img_widget, self.game)
         self.detector_widget.new_detection_img.connect(self.img_widget.update_pixmap)
         self.detector_widget.new_detection_str.connect(self.game.on_new_valid_card)
         self.detector_widget.new_detection_str.connect(self.new_detection)
-        self.center_layout = self.findChild(QHBoxLayout, "center_layout")
         self.center_layout.setAlignment(Qt.AlignTop)
         self.center_layout.addWidget(self.counts_widget)
         self.center_layout.addWidget(self.img_widget)
@@ -215,6 +133,13 @@ class KiitosUi(QtWidgets.QMainWindow):
         self.camera_thread.start()
 
         self.show()
+
+    def save_last_frame(self, event):
+        pil_img = Image.fromarray(self.detector_widget.ncd.cap_manager.last_frame)
+        pil_img = pil_img.rotate(180)
+        path = f'saved_from_live/{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.png'
+        print(f"Saving {path}")
+        pil_img.save(path)
 
     def new_detection(self):
         self.counts_widget.update()

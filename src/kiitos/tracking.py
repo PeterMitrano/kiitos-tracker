@@ -3,8 +3,8 @@ import time
 import cv2
 import numpy as np
 
-import annotation
-from cnn_ocr import CNNOCR
+from kiitos import annotate
+from kiitos.cnn_ocr import CNNOCR
 from video_capture import CaptureManager
 
 DISTANCE_THRESHOLD = 50
@@ -13,7 +13,7 @@ STATE_TEXT_COLOR = (220, 20, 220)
 CONFIDENCE_THRESHOLD = 0.9
 MIN_CONFIDENCE_THRESHOLD = 0.5
 
-confidence_inc = 0.4
+confidence_inc = 0.2
 confidence_dec = confidence_inc / 5
 motion_alpha = 0.5
 
@@ -87,4 +87,4 @@ class NewCardDetector:
         for card_tracker in self.card_trackers:
             if card_tracker.confidence > MIN_CONFIDENCE_THRESHOLD and card_tracker.reported:
                 text_pos = tuple([int(cord) for cord in card_tracker.position])
-                annotation.text(annotated_frame, card_tracker.letter, text_pos, 2, STATE_TEXT_COLOR, 4)
+                annotate.add_text(annotated_frame, card_tracker.letter, text_pos, 2, STATE_TEXT_COLOR, 4)

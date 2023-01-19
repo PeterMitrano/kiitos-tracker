@@ -4,12 +4,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torchvision
-from detectron2.model_zoo import model_zoo
 from torchvision.models.detection import MaskRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 
-from ocr import filter_detections, annotate
+from kiitos.annotate import annotate
 from utils.general import non_max_suppression
 
 
@@ -78,7 +77,7 @@ def viz_plt(viz_img, viz_inputs, seperate_masks=False, n_show=5):
                      alpha=score)
         label = int(viz_inputs['labels'][i])
         letter = chr(label - 1 + ord('a')).upper()
-        main_ax.text(x=int(box[0]), y=int(box[1]), s=f"{letter} {score:.1f}", size='large')
+        main_ax.add_text(x=int(box[0]), y=int(box[1]), s=f"{letter} {score:.1f}", size='large')
 
 
 def box_to_vertices(box):
@@ -89,12 +88,6 @@ def box_to_vertices(box):
     left_bottom = (x1, y2)
     vertices = [left_top, right_top, right_bottom, left_bottom]
     return vertices
-
-
-def get_predictions_detectron(model, input_img):
-    with torch.no_grad():
-        prediction = model(input_img)
-    return prediction
 
 
 def get_predictions_maskrcnn(model, input_img):
@@ -116,7 +109,7 @@ def get_predictions_yolo(model, input_img):
     with torch.no_grad():
         prediction = model(img_tensor)
     predictions = prediction[0]
-    predictions = non_max_suppression(predictions, conf_thres=0.5)
+    predictions = non_max_suppression(predictions, conf_thres=0.7)
     prediction = predictions[0]
     boxes = prediction[:, :4]
     scores = prediction[:, 4].numpy()
@@ -137,23 +130,6 @@ def predictions_to_text_and_vertices(real_prediction):
     return text_and_vertices
 
 
-def load_detectron2():
-    from detectron2.utils.logger import setup_logger
-    setup_logger()
-
-    from detectron2.engine import DefaultPredictor
-    from detectron2.config import get_cfg
-
-    cfg = get_cfg()
-    cfg.MODEL.DEVICE = 'cpu'
-    cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
-    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 26
-    cfg.MODEL.WEIGHTS = "model_final.pth"
-    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # set a custom testing threshold
-    predictor = DefaultPredictor(cfg)
-    return predictor
-
-
 def load_yolov7():
     import torch
     model = torch.load('best.pt', map_location='cpu')
@@ -163,7 +139,7 @@ def load_yolov7():
 
 
 def load_maskrcnn():
-    model_path = pathlib.Path("model-6.pt")
+    model_path = pathlib.Path("../model-6.pt")
     model = load_model(model_path)
     return model
 
@@ -185,3 +161,44 @@ class CNNOCR:
         annotated = annotate(input_img, valid_text_and_vertices)
 
         return annotated, letters, positions
+
+
+MAX_BASELINE_ANGLE_DEG = 30
+MAX_TEXT_AREA = 500
+
+
+def in_bbox(vertices, bbox):
+    for p in vertices:
+        if not (bbox.x0 < p[0] < bbox.x1 and bbox.y0 < p[1] < bbox.y1):
+            return False
+    return True
+
+
+def filter_detections(text_and_vertices, workspace_bbox):
+    letters = []
+    positions = []
+    valid_text_and_vertices = []
+    for letter, vertices in text_and_vertices:
+        left_top = vertices[0]
+        right_bottom = vertices[2]
+        left_bottom = vertices[3]
+        text_w = abs(right_bottom[0] - left_top[0])
+        text_h = abs(right_bottom[1] - left_top[1])
+        text_area = text_w * text_h
+        position = np.array([(right_bottom[0] + left_top[0]) / 2, (right_bottom[1] + left_top[1]) / 2])
+
+        # NOTE: assumes that the camera is aligned with the word in a certain way
+        slope_in_img_frame = np.array(right_bottom) - np.array(left_bottom)
+        angle_in_img_frame = np.rad2deg(np.arctan2(slope_in_img_frame[1], slope_in_img_frame[0]))
+        if abs(angle_in_img_frame) > MAX_BASELINE_ANGLE_DEG:
+            continue
+        if text_area < MAX_TEXT_AREA:
+            continue
+        if not in_bbox(vertices, workspace_bbox):
+            continue
+
+        letters.append(letter)
+        positions.append(position)
+        valid_text_and_vertices.append((letter, vertices))
+
+    return letters, positions, valid_text_and_vertices
