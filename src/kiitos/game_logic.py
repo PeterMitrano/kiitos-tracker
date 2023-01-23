@@ -36,14 +36,12 @@ class KiitosGame(QObject):
 
     def __init__(self):
         super().__init__()
-        self.latest_letter = None
         self.remaining_cards = reset_card_dict()
 
     def is_valid_card(self, card):
         return card in self.remaining_cards
 
     def on_new_valid_card(self, new_card, print_card=False):
-        self.latest_letter = new_card
         if print_card:
             print(f'new card! {new_card}')
 

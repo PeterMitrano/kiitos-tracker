@@ -1,4 +1,5 @@
 import os
+import pathlib
 import sys
 from datetime import datetime
 
@@ -7,17 +8,18 @@ from PIL import Image
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtCore import QLibraryInfo, QThread
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QImage
 
 from counts_widget import CountsWidget
 from game_logic import KiitosGame
 from kiitos.card_detector_widget import CardDetectorWidget
 from kiitos.image_widget import ImageWidget
 from kiitos.next_round_dialog import NextRoundDialog
+from kiitos.upload_for_labeling import make_labelbox_client, upload_image_to_bucket, upload_to_labelbox
 
 # This is a problem caused by OpenCV
 # https://stackoverflow.com/questions/68417682/
 os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(QLibraryInfo.PluginsPath)
+
 
 class KiitosUi(QtWidgets.QMainWindow):
 
@@ -63,12 +65,15 @@ class KiitosUi(QtWidgets.QMainWindow):
         self.game.reset()
         self.counts_widget.update()
 
-    def save_last_frame(self, event):
+    def save_last_frame(self, _):
         pil_img = Image.fromarray(self.detector_widget.ncd.cap_manager.last_frame)
         pil_img = pil_img.rotate(180)
-        path = f'saved_from_live/{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.png'
-        print(f"Saving {path}")
-        pil_img.save(path)
+        image_path = pathlib.Path(f'saved_from_live/{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.png')
+        pil_img.save(image_path)
+        labelbox_client = make_labelbox_client()
+        url = upload_image_to_bucket(image_path)
+        upload_to_labelbox(labelbox_client, url)
+        print(f"Saved image to f{image_path}, and uploaded it for labeling")
 
     def new_detection(self):
         self.counts_widget.update()
@@ -81,5 +86,5 @@ class KiitosUi(QtWidgets.QMainWindow):
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    window = KiitosUi()
+    _ = KiitosUi()
     app.exec()

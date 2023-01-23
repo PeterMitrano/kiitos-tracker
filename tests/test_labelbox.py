@@ -5,24 +5,23 @@ import matplotlib.pyplot as plt
 from labelbox.data.serialization import COCOConverter
 from pycocotools.coco import COCO
 
-from labelbox import Client
-
-API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjbGNtZ2I1OWgwMDN5MDcwcDM1NWJoNWdoIiwib3JnYW5pemF0aW9uSWQiOiJjbGNtZ2I1OTEwMDN4MDcwcDUxa3FlZnp1IiwiYXBpS2V5SWQiOiJjbGNta2E4azM1Ymd4MDd3Y2Vocmdjb28yIiwic2VjcmV0IjoiMjVmOTMwNTBiY2VmNTRkM2Y5YWEyNThhYWE4OGEwZmQiLCJpYXQiOjE2NzMxMzMxNTksImV4cCI6MjMwNDI4NTE1OX0.b95uFb5GosYK5g6GP0if_cxsqMqC_AD9RrXUtkBv7cY"
+from kiitos.upload_for_labeling import upload_to_labelbox, make_labelbox_client
 
 
 def main():
-    client = Client(api_key=API_KEY)
-    project = client.get_project('clcmgcpwe01my07yh0uc04shm')
+    client = make_labelbox_client()
+    download_dataset(client)
+
+
+def download_dataset(client, project_id='clcmgcpwe01my07yh0uc04shm'):
+    project = client.get_project(project_id)
     labels = project.label_generator()
-
     image_path = 'labelbox/images/'
-
     coco_labels = COCOConverter.serialize_instances(
         labels,
         image_root=image_path,
         ignore_existing_data=True
     )
-
     coco_labels['info']['image_root'] = coco_labels['info']['image_root'].as_posix()
     with open("labelbox_coco-1.json", 'w') as f:
         json.dump(coco_labels, f)

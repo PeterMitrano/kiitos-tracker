@@ -14,4 +14,4 @@ class CaptureManager(threading.Thread):
 
     def run(self):
         while not self.stop_event.isSet():
-            ret, self.last_frame = self.camera.read()
+            _, self.last_frame = self.camera.read()
