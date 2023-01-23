@@ -32,6 +32,8 @@ class ImageWidget(QLabel):
 
         self.grey_outside_bbox(annotated_image, x0, x1, y0, y1)
 
+        annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB)
+
         q_img = array_to_qimg(annotated_image)
         pixmap = QPixmap(q_img)
         # Calling setPixmap will trigger a paintEvent which ensures the box is drawn on top of the image
