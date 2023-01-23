@@ -3,7 +3,7 @@ import sys
 
 # noinspection PyUnresolvedReferences
 from PyQt5 import QtWidgets, uic
-from PyQt5.QtCore import QLibraryInfo, QThread
+from PyQt5.QtCore import QLibraryInfo, QThread, QSettings
 from PyQt5.QtCore import Qt
 
 from counts_widget import CountsWidget
@@ -12,6 +12,7 @@ from kiitos.capture_worker import CaptureWorker
 from kiitos.card_detector_widget import CardDetectorWidget
 from kiitos.image_widget import ImageWidget
 from kiitos.next_round_dialog import NextRoundDialog
+from kiitos.settings_dialog import SettingsDialog
 
 # This is a problem caused by OpenCV
 # https://stackoverflow.com/questions/68417682/
@@ -29,10 +30,13 @@ class KiitosUi(QtWidgets.QMainWindow):
         margin = 10
         self.setContentsMargins(margin, margin, margin, margin)
 
+        self.settings = QSettings('Kiitos', 'Kiitos')
+
         self.capture_action.triggered.connect(self.save_last_frame)
         self.capture_action.setShortcut("Ctrl+S")
         self.reset_action.triggered.connect(self.reset)
         self.reset_action.setShortcut("Ctrl+R")
+        self.settings_action.triggered.connect(self.show_settings_dialog)
         self.counts_widget = CountsWidget(self, self.game)
         # FIXME: should the detector widget own the image widget? or vise-versa?
         self.img_widget = ImageWidget(self)
@@ -56,6 +60,12 @@ class KiitosUi(QtWidgets.QMainWindow):
 
         self.show()
 
+    def show_settings_dialog(self):
+        settings_dialog = SettingsDialog(self.settings)
+        if settings_dialog.exec():
+            self.detector_widget.sound_effects = settings_dialog.sound_effects_checkbox.isChecked()
+            self.save_settings()
+
     def on_next_round(self):
         dialog = NextRoundDialog()
         if dialog.exec():
@@ -77,9 +87,15 @@ class KiitosUi(QtWidgets.QMainWindow):
         self.counts_widget.update()
 
     def closeEvent(self, event):
+        self.save_settings()
         self.detector_widget.done = True
         while self.camera_thread.wait(10):
             pass
+
+    def save_settings(self):
+        self.detector_widget.save_settings()
+        self.img_widget.save_settings()
+        self.settings.sync()
 
 
 if __name__ == '__main__':

@@ -13,10 +13,13 @@ class CardDetectorWidget(QObject):
 
     def __init__(self, img_widget: ImageWidget, game: KiitosGame):
         super().__init__()
+        self.settings = img_widget.settings
         self.game = game
         self.img_widget = img_widget
         self.ncd = NewCardDetector()
         self.done = False
+
+        self.sound_effects = self.settings.value('sound_effects', True, type=bool)
 
         self.effect = QSoundEffect()
         self.effect.setSource(QUrl.fromLocalFile("notification.wav"))
@@ -27,6 +30,10 @@ class CardDetectorWidget(QObject):
             new_card, annotated_image = self.ncd.detect(self.img_widget.draggable_bbox.bbox)
             self.new_annotated_image.emit(annotated_image)
             if new_card is not None and self.game.is_valid_card(new_card):
-                self.effect.play()
+                if self.sound_effects:
+                    self.effect.play()
                 self.new_detection_str.emit(new_card)
         self.ncd.cap_manager.stop()
+
+    def save_settings(self):
+        self.settings.setValue('sound_effects', self.sound_effects)

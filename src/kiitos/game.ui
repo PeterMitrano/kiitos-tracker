@@ -56,7 +56,7 @@
      <x>0</x>
      <y>0</y>
      <width>756</width>
-     <height>31</height>
+     <height>22</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuTools">
@@ -70,6 +70,7 @@
      <string>Game</string>
     </property>
     <addaction name="reset_action"/>
+    <addaction name="settings_action"/>
    </widget>
    <addaction name="menuGame"/>
    <addaction name="menuTools"/>
@@ -82,6 +83,11 @@
   <action name="reset_action">
    <property name="text">
     <string>Reset</string>
+   </property>
+  </action>
+  <action name="settings_action">
+   <property name="text">
+    <string>Settings</string>
    </property>
   </action>
  </widget>

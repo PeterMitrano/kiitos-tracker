@@ -40,10 +40,10 @@ class BBoxHandle(QLabel):
 
 @dataclass
 class BBox:
-    x0: float
-    y0: float
-    x1: float
-    y1: float
+    x0: int
+    y0: int
+    x1: int
+    y1: int
 
 
 class DraggableBbox:
@@ -51,7 +51,12 @@ class DraggableBbox:
 
     def __init__(self, parent):
         self.parent = parent
-        self.bbox = BBox(x0=2, y0=2, x1=636, y1=200)
+        self.settings = parent.settings
+        x0 = int(self.settings.value('x0', 0))
+        y0 = int(self.settings.value('y0', 0))
+        x1 = int(self.settings.value('x1', 636))
+        y1 = int(self.settings.value('y1', 200))
+        self.bbox = BBox(x0=x0, y0=y0, x1=x1, y1=y1)
 
         self.left = BBoxHandle(parent, HandleDirection.HORIZONTAL)
         self.left.position.connect(self.on_left_position_changed)
@@ -90,3 +95,9 @@ class DraggableBbox:
         y0 = self.bbox.y0
 
         return x0, y0, w, h
+
+    def save_settings(self):
+        self.settings.setValue('x0', self.bbox.x0)
+        self.settings.setValue('y0', self.bbox.y0)
+        self.settings.setValue('x1', self.bbox.x1)
+        self.settings.setValue('y1', self.bbox.y1)

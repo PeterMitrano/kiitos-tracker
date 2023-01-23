@@ -18,6 +18,7 @@ class ImageWidget(QLabel):
 
     def __init__(self, parent):
         super().__init__(parent)
+        self.settings = parent.settings
         init_pixmap = QPixmap(IMG_W, IMG_H)
         init_pixmap.fill(Qt.gray)
         self.setPixmap(init_pixmap)
@@ -41,7 +42,7 @@ class ImageWidget(QLabel):
 
     def grey_outside_bbox(self, annotated_image, x0, x1, y0, y1):
         greyed = cv2.cvtColor(annotated_image, cv2.COLOR_RGB2GRAY)
-        greyed  = np.expand_dims(greyed, axis=2)
+        greyed = np.expand_dims(greyed, axis=2)
         k = -120
         annotated_image[:y0, :] = (greyed[:y0, :] + k).clip(0, 255)
         annotated_image[y1:, :] = (greyed[y1:, :] + k).clip(0, 255)
@@ -81,3 +82,6 @@ class ImageWidget(QLabel):
         h = y1 - y0
         w = x1 - x0
         return h, w, x0, x1, y0, y1
+
+    def save_settings(self):
+        self.draggable_bbox.save_settings()
