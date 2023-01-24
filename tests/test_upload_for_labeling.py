@@ -3,7 +3,7 @@ import pathlib
 import numpy as np
 from PIL import Image
 
-from kiitos.upload_for_labeling import upload_to_labelbox, make_labelbox_client, upload_image_to_bucket
+from kiitos.upload_for_labeling import upload_to_labelbox, make_labelbox_client
 
 
 def main():
@@ -12,8 +12,7 @@ def main():
     Image.fromarray(img_np).save(image_path)
 
     labelbox_client = make_labelbox_client()
-    url = upload_image_to_bucket(image_path)
-    upload_to_labelbox(labelbox_client, url)
+    upload_to_labelbox(labelbox_client, image_path)
 
 
 if __name__ == '__main__':
