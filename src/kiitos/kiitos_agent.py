@@ -40,13 +40,23 @@ class Index:
         return f"({self.word_idx},{self.substring_idx})"
 
 
-CharLike = Union[str, Index]
+StrOrIdx = Union[str, Index]
 
 
 @dataclass
 class Node:
-    name: str
+    name: StrOrIdx
     children: Tuple["Node", ...] = ()
+
+
+    def __eq__(self, other):
+        return self.name == other.name
+
+    def find_child_by_name(self, name):
+        for child in self.children:
+            if child.name == name:
+                return child
+        raise RuntimeError(f"No such child with name {name}")
 
 
 def gen_substrings(word: Sequence, word_idx: int):
@@ -89,47 +99,56 @@ def viz_trie(trie):
     )
 
 
+def count_substrings(words):
+    # figure out how many suffixes exist in the dictionary
+    n_suffixes = sum([triangle_number(len(w)) for w in words])
+    print(f"Expecting {n_suffixes=:,d}")
+    n_chars = sum([staircase_number(len(w)) for w in words])
+    print(f"Which would have a total of {n_chars=:,d}")
+
+
+def add_to_trie(trie: Node, substr):
+    c0_node = Node(substr[0])
+    if c0_node not in trie.children:
+        trie.children += (c0_node,)
+        viz_trie(trie)
+    else:
+        c0_node = trie.find_child_by_name(c0_node.name)
+
+    if len(substr) > 1:
+        # recursively add the rest of the substr
+        add_to_trie(c0_node, substr[1:])
+
+        # check that adding to c0_node also modified the trie, in-place
+        viz_trie(trie)
+
+
 def main():
     # words = load_words()
     # words = load_words(Path("data/words_alpha_modified.txt"))
-    #
-    # words = [
-    #     "then",
-    #     "theme",
-    #     "toon",
-    #     "that",
-    #     "moon",
-    # ]
-    #
-    # # figure out how many suffixes exist in the dictionary
-    # n_suffixes = sum([triangle_number(len(w)) for w in words])
-    # print(f"Expecting {n_suffixes=:,d}")
-    #
-    # n_chars = sum([staircase_number(len(w)) for w in words])
-    # print(f"Which would have a total of {n_chars=:,d}")
-    #
-    # # Construct a trie using all possible substrings
-    # # trie: Mapping[CharLike, CharLike] = {}
-    #
-    # for word_idx, word in enumerate(words):
-    #     for substr, idx in gen_substrings(word, word_idx):
-    #         print(substr, idx)
 
-    trie = Node(
-        name="t",
-        children=(
-            Node(
-                name="o",
-                children=(Node(name="n"), Node(name="p")),
-            ),
-            Node(name="i", children=(Node(name="n"),)),
-        ),
-    )
+    words = [
+        "then",
+        "theme",
+        "toon",
+        "that",
+        "moon",
+    ]
 
-    viz_trie(trie)
+    # Construct a trie using all possible substrings
+    trie = Node("\0")
 
     rr.init("kiito_agent_trie")
     rr.connect_tcp()
+
+    for word_idx, word in enumerate(words):
+        for substr, idx in gen_substrings(word, word_idx):
+            print(substr, idx)
+            substr_seq = tuple(substr) + (idx,)
+            add_to_trie(trie, substr_seq)
+
+    viz_trie(trie)
+
 
 
 if __name__ == "__main__":
