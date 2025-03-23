@@ -10,3 +10,4 @@ __pycache__
 yolov7
 saved_from_live
 test_images
+.idea
