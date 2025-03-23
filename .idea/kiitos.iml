@@ -14,8 +14,9 @@
       <excludeFolder url="file://$MODULE_DIR$/labelbox" />
       <excludeFolder url="file://$MODULE_DIR$/test_images2" />
       <excludeFolder url="file://$MODULE_DIR$/test_images3" />
+      <excludeFolder url="file://$MODULE_DIR$/.venv" />
     </content>
-    <orderEntry type="inheritedJdk" />
+    <orderEntry type="jdk" jdkName="uv (kiitos-tracker)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>

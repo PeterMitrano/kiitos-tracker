@@ -1,13 +1,10 @@
-import os
-import sys
-
 # noinspection PyUnresolvedReferences
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtCore import QLibraryInfo, QThread, QSettings
 from PyQt5.QtCore import Qt
 
-from counts_widget import CountsWidget
-from game_logic import KiitosGame
+from kiitos.counts_widget import CountsWidget
+from kiitos.game_logic import KiitosGame
 from kiitos.capture_worker import CaptureWorker
 from kiitos.card_detector_widget import CardDetectorWidget
 from kiitos.image_widget import ImageWidget
@@ -16,7 +13,7 @@ from kiitos.settings_dialog import SettingsDialog
 
 # This is a problem caused by OpenCV
 # https://stackoverflow.com/questions/68417682/
-os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(QLibraryInfo.PluginsPath)
+# os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(QLibraryInfo.PluginsPath)
 
 
 class KiitosUi(QtWidgets.QMainWindow):
@@ -96,9 +93,3 @@ class KiitosUi(QtWidgets.QMainWindow):
         self.detector_widget.save_settings()
         self.img_widget.save_settings()
         self.settings.sync()
-
-
-if __name__ == '__main__':
-    app = QtWidgets.QApplication(sys.argv)
-    _ = KiitosUi()
-    app.exec()
