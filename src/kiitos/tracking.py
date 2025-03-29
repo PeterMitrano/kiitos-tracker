@@ -5,7 +5,7 @@ import numpy as np
 
 from kiitos import annotate
 from kiitos.cnn_ocr import CNNOCR
-from video_capture import CaptureManager
+from kiitos.video_capture import CaptureManager
 
 DISTANCE_THRESHOLD = 50
 

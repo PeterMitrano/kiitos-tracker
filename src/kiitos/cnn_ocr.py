@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 from kiitos.annotate import annotate
-from utils.general import non_max_suppression
+from ultralytics.utils.ops import non_max_suppression
 
 MAX_BASELINE_ANGLE_DEG = 30
 MAX_TEXT_AREA = 500

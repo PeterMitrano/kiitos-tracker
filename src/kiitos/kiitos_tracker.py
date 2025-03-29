@@ -1,4 +1,4 @@
-# noinspection PyUnresolvedReferences
+import os
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtCore import QLibraryInfo, QThread, QSettings
 from PyQt5.QtCore import Qt
@@ -13,7 +13,7 @@ from kiitos.settings_dialog import SettingsDialog
 
 # This is a problem caused by OpenCV
 # https://stackoverflow.com/questions/68417682/
-# os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(QLibraryInfo.PluginsPath)
+os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(QLibraryInfo.PluginsPath)
 
 
 class KiitosUi(QtWidgets.QMainWindow):
