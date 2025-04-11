@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import rerun as rr
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QPainter, QPen, QImage
 from PyQt5.QtWidgets import QLabel, QSizePolicy
@@ -44,6 +45,8 @@ class ImageWidget(QLabel):
         greyed = cv2.cvtColor(annotated_image, cv2.COLOR_RGB2GRAY)
         greyed = np.expand_dims(greyed, axis=2)
         k = -120
+        # to prevent uint8 underflow/overflow, convert to full int
+        greyed = greyed.astype(int)
         annotated_image[:y0, :] = (greyed[:y0, :] + k).clip(0, 255)
         annotated_image[y1:, :] = (greyed[y1:, :] + k).clip(0, 255)
         annotated_image[:, :x0] = (greyed[:, :x0] + k).clip(0, 255)

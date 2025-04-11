@@ -1,4 +1,5 @@
 from PyQt5.QtCore import pyqtSignal, QObject
+import rerun as rr
 
 
 def reset_card_dict():
@@ -44,6 +45,7 @@ class KiitosGame(QObject):
     def on_new_valid_card(self, new_card, print_card=False):
         if print_card:
             print(f'new card! {new_card}')
+        rr.log("on_new_valid_card", rr.TextLog(f"{new_card}"))
 
         if self.remaining_cards[new_card] > 0:
             self.remaining_cards[new_card] -= 1

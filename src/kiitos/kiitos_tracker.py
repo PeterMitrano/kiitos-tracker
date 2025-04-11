@@ -1,4 +1,5 @@
 import os
+import rerun as rr
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtCore import QLibraryInfo, QThread, QSettings
 from PyQt5.QtCore import Qt
@@ -19,6 +20,9 @@ os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(QLibraryInfo.P
 class KiitosUi(QtWidgets.QMainWindow):
 
     def __init__(self):
+        rr.init("kiitos_tracker")
+        rr.connect_tcp()
+
         super(KiitosUi, self).__init__()
         uic.loadUi('src/kiitos/game.ui', self)
 

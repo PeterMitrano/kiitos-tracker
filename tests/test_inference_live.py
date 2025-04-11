@@ -6,13 +6,12 @@ import cv2
 import numpy as np
 
 from kiitos.annotate import annotate
-from kiitos.cnn_ocr import get_predictions_yolo, load_yolov7, predictions_to_text_and_vertices
+from kiitos.cnn_ocr import get_predictions_yolo, load_yolo, predictions_to_text_and_vertices
 from kiitos.video_capture import CaptureManager
 
 
 def main():
-    # model = load_maskrcnn()
-    model = load_yolov7()
+    model = load_yolo()
 
     save_dir = pathlib.Path("saved_from_live")
     save_dir.mkdir(exist_ok=True)
@@ -28,7 +27,6 @@ def main():
         pil_img = PIL.Image.fromarray(np_img).resize((640, 480)).rotate(180)
 
         t0 = perf_counter()
-        # real_prediction = get_predictions_maskrcnn(model, np.array(pil_img))
         real_prediction = get_predictions_yolo(model, np.array(pil_img))
         dt = perf_counter() - t0
         print(f"Prediction took {dt:.2f} seconds")

@@ -1,8 +1,11 @@
+import logging
+
 import numpy as np
 import torch
 
 from kiitos.annotate import annotate
-from ultralytics.utils.ops import non_max_suppression
+from ultralytics import YOLO
+from ultralytics.utils import LOGGER
 
 MAX_BASELINE_ANGLE_DEG = 30
 MAX_TEXT_AREA = 500
@@ -28,10 +31,9 @@ def get_predictions_yolo(model, input_img):
     img_tensor /= 255.0
     img_tensor = img_tensor.unsqueeze(0)
     with torch.no_grad():
-        prediction = model(img_tensor)
-    predictions = prediction[0]
-    predictions = non_max_suppression(predictions, conf_thres=0.7)
-    prediction = predictions[0]
+        predictions_list = model(img_tensor)
+    predictions = predictions_list[0]
+    prediction = predictions.boxes.data
     boxes = prediction[:, :4]
     scores = prediction[:, 4].numpy()
     labels = prediction[:, 5].numpy().astype(int) + 1
@@ -51,17 +53,15 @@ def predictions_to_text_and_vertices(real_prediction):
     return text_and_vertices
 
 
-def load_yolov7():
-    model = torch.load('best_real2.pt', map_location='cpu')
-    model = model['model'].to(dtype=torch.float32)
-    model.eval()
-    return model
+def load_yolo():
+    return YOLO("best.pt")
 
 
 class CNNOCR:
 
     def __init__(self):
-        self.model = load_yolov7()
+        self.model = YOLO("best.pt")
+        LOGGER.setLevel(logging.WARNING)
 
     def detect(self, input_img, workspace_bbox):
         predictions = get_predictions_yolo(self.model, input_img)
