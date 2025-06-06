@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from time import perf_counter
-from typing import Sequence, Union, Tuple, Dict
+from typing import Sequence, Union, Tuple, Dict, List
 
 import rerun as rr
 from tqdm import tqdm
@@ -32,46 +32,29 @@ def load_words(words_path=Path("data/1000-most-common-words.txt")):
     with words_path.open() as f:
         return [w.strip() for w in f.readlines()]
 
-
-@dataclass
-class Index:
-    word_idx: int
-    substring_idx: int
-
-    def __repr__(self):
-        return f"({self.word_idx},{self.substring_idx})"
-
-    def __str__(self):
-        return f"({self.word_idx},{self.substring_idx})"
-
-    def __hash__(self):
-        return 1_000_000 * self.word_idx + self.substring_idx
-
-
-StrOrIdx = Union[str, Index]
-
-
 @dataclass
 class Node:
-    name: StrOrIdx
-    children: Dict[StrOrIdx, "Node"] = None
-    original_word = None
+    children: Dict[str, "Node"] = None
+    words: List[str] = None
+    word_indices: List[Tuple[int]] = None
 
     def __post_init__(self):
         if self.children is None:
             self.children = {}
+        if self.words is None:
+            self.words = []
+        if self.word_indices is None:
+            self.word_indices = []
 
-    def __eq__(self, other):
-        return self.name == other.name
-
-    def find_child_by_name(self, name):
-        return self.children.get(name)
-
-    def get_name(self):
-        if self.original_word is not None:
-            return f"{self.name} {self.original_word}"
-        else:
-            return self.name
+    def to_json(self):
+        return {
+            "children": {
+                str(name): node.to_json()
+                for name, node in self.children.items()
+            },
+            "words": self.words,
+            "word_indices": self.word_indices,
+        }
 
 
 def gen_substrings(word: Sequence, word_idx: int):
@@ -82,15 +65,8 @@ def gen_substrings(word: Sequence, word_idx: int):
     suffix_idx = 0
     for suffix_len in range(1, word_len + 1):
         for start in range(word_len - suffix_len + 1):
-            yield word[start : start + suffix_len], Index(word_idx, suffix_idx)
+            yield word[start : start + suffix_len], (word_idx, suffix_idx)
             suffix_idx += 1
-
-
-def trie_to_json(node: Node | StrOrIdx):
-    if isinstance(node.name, Index):
-        return node.original_word
-    else:
-        return {node.name: [trie_to_json(c) for c in node.children]}
 
 
 def trie_to_graph(node: Node, vertices=(), labels=(), edges=(), vertex_idx=0):
@@ -129,31 +105,22 @@ def count_substrings(words):
     print(f"Which would have a total of {n_chars=:,d}")
 
 
-# def add_to_trie(trie: Node, substr, original_word=None):
-#     c0 = substr[0]
-#     if c0 not in trie.children:
-#         trie.children[c0] = Node(c0)
-#         if isinstance(c0, Index):
-#             trie.children[c0].original_word = original_word
-#
-#     if len(substr) > 1:
-#         # recursively add the rest of the substr
-#         add_to_trie(trie.children[c0], substr[1:], original_word=original_word)
-#
-
-def add_to_trie(trie: Node, substr, original_word=None):
+def add_to_trie(trie: Node, substr, idx, original_word=None):
     node = trie
     for c in substr:
         if c not in node.children:
-            node.children[c] = Node(c)
+            node.children[c] = Node()
         node = node.children[c]  # Move deeper in the trie
-    node.original_word = original_word
+
+    node.words.append(original_word)
+    node.word_indices.append(idx)
+
 
 def get_possible_words(node: Node):
     if node.original_word is not None:
         yield node.original_word
-    for c in node.children:
-        yield from get_possible_words(c)
+    for c_name, c_node in node.children.items():
+        yield from get_possible_words(c_node)
 
 
 def set_up_wordnet():
@@ -188,6 +155,7 @@ def set_up_wordnet():
 
 def main():
     words = load_words(Path("data/nltk_words.txt"))
+    # words = list(filter(lambda w: len(w) <= 10, words))
     # words = [
     #     'banana',
     #     'anty',
@@ -195,27 +163,31 @@ def main():
     # ]
 
     # Construct a trie using all possible substrings
-    trie = Node("")
+    trie = Node()
 
-    rr.init("generate_trie")
-    rr.connect_tcp()
+    # rr.init("generate_trie")
+    # rr.connect_tcp()
+
+    SAVE_PERIOD = 25000
+    trie_path = Path("data/trie.pkl")
+    trie_json_path = Path("data/trie.json")
+    trie_bt_path = Path("data/trie.bt")
 
     for word_idx, word in enumerate(tqdm(words)):
         for substr, idx in gen_substrings(word, word_idx):
-            substr_seq = tuple(substr) + (idx,)
-            add_to_trie(trie, substr_seq, original_word=word)
+            add_to_trie(trie, substr, idx, original_word=word)
 
-        # Save the data structure periodically
-        if word_idx % 2500 == 0 and word_idx > 2500:
-            trie_path = Path("data/trie.pkl")
-            with trie_path.open("wb") as trie_f:
-                pickle.dump(trie, trie_f)
+    pass
 
-    # viz_trie(trie)
+    # print(f"Saving pkl {trie_path}")
+    # with trie_path.open("wb") as trie_f:
+    #     pickle.dump(trie, trie_f)
+    #
+    print(f"Saving json {trie_json_path}")
+    trie_json = trie.to_json()
 
-    # trie_path = Path("data/trie.pkl")
-    with trie_path.open("wb") as trie_f:
-        pickle.dump(trie, trie_f)
+    with trie_json_path.open("w") as trie_json_f:
+        json.dump(trie_json, trie_json_f)
 
 
 if __name__ == "__main__":
